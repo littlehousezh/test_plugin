@@ -5,11 +5,31 @@
     <vendor>ronah123</vendor>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.coverage</depends>
+    <depends>com.intellij.modules.java</depends>
+
+    <actions>
+        <action id="AnalyzeCoverageAction"
+                class="com.github.ronah123.vanderbilttestplugin.actions.AnalyzeCoverageAction"
+                text="Analyze Coverage (IDE API)"
+                description="Rank methods that need tests using the current IDE coverage suite.">
+            <!-- Puts it under Tools menu -->
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow factoryClass="com.github.ronah123.vanderbilttestplugin.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
         <postStartupActivity implementation="com.github.ronah123.vanderbilttestplugin.startup.MyProjectActivity" />
+
+        <toolWindow
+                id="Coverage Hotspots"
+                anchor="right"
+                factoryClass="com.github.ronah123.vanderbilttestplugin.coverage.CoverageHotspotsToolWindowFactory"
+                canCloseContents="true"/>
     </extensions>
+
+
 </idea-plugin>

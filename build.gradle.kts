@@ -47,6 +47,9 @@ dependencies {
         // Module Dependencies. Uses `platformBundledModules` property from the gradle.properties file for bundled IntelliJ Platform modules.
         bundledModules(providers.gradleProperty("platformBundledModules").map { it.split(',') })
 
+//        bundledPlugin("com.intellij.java")
+//        bundledPlugin("com.intellij.java.coverage")
+
         testFramework(TestFrameworkType.Platform)
     }
 }
