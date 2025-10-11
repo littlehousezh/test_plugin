@@ -15,6 +15,11 @@ import com.intellij.psi.search.GlobalSearchScope
 
 class AnalyzeCoverageAction : AnAction("Analyze Coverage (IDE API)") {
 
+    companion object {
+        // Set to a positive number to cap the list, or null to show all rows.
+        private val TOP_N: Int? = 25
+    }
+
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
 
@@ -45,22 +50,23 @@ class AnalyzeCoverageAction : AnAction("Analyze Coverage (IDE API)") {
                 indicator.text = "Aggregating per-method coverage…"
                 val allMethods = aggregateByMethod(coverageData)
 
-                // Filter to classes that belong to THIS project (exclude junit/intellij libs)
+                // Filter to classes that belong to THIS project (exclude libs) and exclude tests
                 val projectMethods = filterMethodsToProject(project, allMethods)
                 if (projectMethods.isEmpty()) {
                     info(
                         project,
-                        "No project classes found in coverage (current suite may only include libraries/junit)."
+                        "No production (non-test) project classes found in coverage."
                     )
                     return
                 }
 
                 // Rank: most missed lines first, then lowest percentage
-                val top = projectMethods.sortedWith(
+                val sorted = projectMethods.sortedWith(
                     compareByDescending<MethodHit> { it.missedLines }.thenBy { it.linePct }
-                ).take(25)
+                )
+                val top = TOP_N?.let { n -> sorted.take(n) } ?: sorted
 
-// Show in the tool window
+                // Show in the tool window
                 project.getService(com.github.ronah123.vanderbilttestplugin.coverage.CoverageHotspotsService::class.java)
                     .showInToolWindow(top)
             }
@@ -81,24 +87,39 @@ class AnalyzeCoverageAction : AnAction("Analyze Coverage (IDE API)") {
             val psi = JavaPsiFacade.getInstance(project)
             val index = ProjectFileIndex.getInstance(project)
 
-            methods.filter { m ->
-                val fqn = m.classFqn
-                // Try FQN as-is, then with '$' replaced (inner classes)
-                val psiClass =
-                    psi.findClass(fqn, scope)
-                        ?: psi.findClass(fqn.replace('$', '.'), scope)
-                if (psiClass == null) {
-                    false
-                } else {
-                    val vFile = psiClass.containingFile?.virtualFile
-                    vFile != null && index.isInContent(vFile)
+            methods.asSequence()
+                // Fast name-based guard (cheap)
+                .filter { m -> !looksLikeTestFqn(m.classFqn) }
+                .filter { m ->
+                    val fqn = m.classFqn
+                    val psiClass =
+                        psi.findClass(fqn, scope)
+                            ?: psi.findClass(fqn.replace('$', '.'), scope)
+                    if (psiClass == null) {
+                        false
+                    } else {
+                        val vFile = psiClass.containingFile?.virtualFile
+                        // keep only project *production* source files
+                        vFile != null &&
+                                index.isInContent(vFile) &&
+                                !index.isInTestSourceContent(vFile)
+                    }
                 }
-            }
+                .toList()
         }
     }
 
-    // -------------------------- Pretty report --------------------------
+    /** Heuristics to identify test classes by name. */
+    private fun looksLikeTestFqn(fqn: String): Boolean {
+        val simple = fqn.substringAfterLast('.')
+        return simple.contains("test", ignoreCase = true) ||
+                simple.endsWith("IT", ignoreCase = true) ||
+                simple.endsWith("Spec", ignoreCase = true)
+    }
 
+    // -------------------------- Pretty report (unused in panel) --------------------------
+
+    @Suppress("unused")
     private fun formatReport(rows: List<MethodHit>): String {
         if (rows.isEmpty()) return "No class/method coverage found in the current suite."
 
@@ -174,6 +195,10 @@ class AnalyzeCoverageAction : AnAction("Analyze Coverage (IDE API)") {
             val key = rawKey as? String ?: continue
             val classData = classDataAny ?: continue
 
+            val fqn = key.replace('/', '.')
+            // Early skip for obvious tests (cheap)
+            if (looksLikeTestFqn(fqn)) continue
+
             @Suppress("UNCHECKED_CAST")
             val linesArray: Array<Any?> =
                 (getLines.invoke(classData) as? Array<Any?>) ?: emptyArray()
@@ -200,7 +225,7 @@ class AnalyzeCoverageAction : AnAction("Analyze Coverage (IDE API)") {
                 val pct = if (total == 0) 1.0 else covered.toDouble() / total
 
                 out += MethodHit(
-                    classFqn = key.replace('/', '.'),
+                    classFqn = fqn,
                     method = mName,
                     totalLines = total,
                     coveredLines = covered,
@@ -231,6 +256,10 @@ class AnalyzeCoverageAction : AnAction("Analyze Coverage (IDE API)") {
         for ((rawKey, classDataAny) in classesMap) {
             val key = rawKey as? String ?: continue
             val classData = classDataAny ?: continue
+
+            val fqn = key.replace('/', '.')
+            // Early skip for obvious tests (cheap)
+            if (looksLikeTestFqn(fqn)) continue
 
             val linesArray: Array<Any?> = try {
                 @Suppress("UNCHECKED_CAST")
@@ -264,7 +293,7 @@ class AnalyzeCoverageAction : AnAction("Analyze Coverage (IDE API)") {
                 val pct = if (total == 0) 1.0 else covered.toDouble() / total
 
                 out += MethodHit(
-                    classFqn = key.replace('/', '.'),
+                    classFqn = fqn,
                     method = mName,
                     totalLines = total,
                     coveredLines = covered,
