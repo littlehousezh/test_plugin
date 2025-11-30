@@ -109,16 +109,22 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
                 indicator.isIndeterminate = true
                 indicator.text = "Collecting source & tests…"
 
-                val bundles = ReadAction.compute<List<MethodBundle>, RuntimeException> {
-                    CodeExtraction.resolveTopBundles(project, pairs)
+                // Compute BOTH the method bundles and the single test file inside a ReadAction.
+                val (bundles, testFile) = ReadAction.compute<Pair<List<MethodBundle>, TestFileBundle?>, RuntimeException> {
+                    val bs = CodeExtraction.resolveTopBundles(project, pairs)
+                    val tf = CodeExtraction.resolveSingleTestFile(project, bs)
+                    bs to tf
                 }
+
                 if (bundles.isEmpty()) {
                     info("Could not resolve any methods/test files to analyze.")
                     return
                 }
 
                 indicator.text = "Calling Chat API…"
-                val prompt = CodeExtraction.buildPrompt(bundles)
+                // NOTE: buildPrompt now requires the testFile bundle as 2nd param.
+                val prompt = CodeExtraction.buildPrompt(bundles, testFile)
+
                 val client: ChatClient = AmplifyChatClient(
                     CoverageAIConfig.AMPLIFY_BASE,
                     CoverageAIConfig.AMPLIFY_BEARER,
@@ -141,12 +147,13 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
                     val shownPrompt = if (CoverageAIConfig.DEBUG_SIMPLE_PROMPT)
                         "DEBUG simple prompt:\n${CoverageAIConfig.DEBUG_SIMPLE_PROMPT_TEXT}"
                     else
-                        prompt  // ✅ show entire prompt, no truncation
+                        prompt  // show full prompt
                     RecommendationsDialog(project, shownPrompt, response).show()
                 }
             }
         }.queue()
     }
+
 
     private fun info(text: String) {
         ApplicationManager.getApplication().invokeLater {

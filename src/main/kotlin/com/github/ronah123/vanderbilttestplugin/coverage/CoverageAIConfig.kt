@@ -6,12 +6,11 @@ import java.util.Properties
 object CoverageAIConfig {
     const val MAX_METHODS_TO_REVIEW = 5
     const val MAX_METHOD_CHARS = 3500
-    const val MAX_TESTFILE_CHARS = 8000
     const val MAX_PROMPT_CHARS = 60000
 
     const val AMPLIFY_BASE = "https://prod-api.vanderbilt.ai"
     val AMPLIFY_BEARER: String by lazy { loadToken() }    // ✅ now loaded dynamically
-    const val MODEL_ID = "gpt-4o-mini"
+    const val MODEL_ID = "gpt-5"
 
     const val DEBUG_SIMPLE_PROMPT = false
     const val DEBUG_SIMPLE_PROMPT_TEXT = "What is the capital of France?"
