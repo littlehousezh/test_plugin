@@ -413,10 +413,10 @@ You can also enable a simple debug mode:
 
 This repository includes two key documents that support the analysis conducted in this project:
 
-1. [Prompt–Response Dataset] (https://docs.google.com/document/d/1m3NK7mGjNghGCPCnIksi6lZACigAT8WzbWJDHVuTR_E/edit?usp=sharing)
+1. [Prompt–Response Dataset](https://docs.google.com/document/d/1m3NK7mGjNghGCPCnIksi6lZACigAT8WzbWJDHVuTR_E/edit?usp=sharing)
    This document contains the full sequence of prompts used to request AI-generated test-case feedback, along with the corresponding responses produced by the model. It serves as the raw data for the project and captures how different prompting strategies influence the quality and content of AI feedback.
 
-2. [Evaluation and Scoring Framework] (https://docs.google.com/document/d/1CKGOfI5Vv9n97BnT3IzMrvUzUU5R_HOjgaC6ywclUuc/edit?usp=sharing)
+2. [Evaluation and Scoring Framework](https://docs.google.com/document/d/1CKGOfI5Vv9n97BnT3IzMrvUzUU5R_HOjgaC6ywclUuc/edit?usp=sharing)
    This document outlines the quantitative methodology used to evaluate each AI response. It describes the scoring metrics (Specificity and Actionability Score, Error Detection Score, Clarity and Structure Score, and optional Brevity Ratio), explains how each score is calculated, and provides the weighting scheme used to determine the overall effectiveness of each prompt–response pair.
 
 Together, these documents provide both the dataset and the analytical framework needed to reproduce, audit, or extend the findings of this project.
