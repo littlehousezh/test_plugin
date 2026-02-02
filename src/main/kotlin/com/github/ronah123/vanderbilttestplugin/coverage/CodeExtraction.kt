@@ -168,13 +168,13 @@ object CodeExtraction {
                 pf
             }.map { pf ->
                 val text = pf.text
-                val nameLc = pf.name.toLowerCase()
+                val nameLc = pf.name.lowercase()
                 val hitTestWord =
                     nameLc.contains("test") || nameLc.endsWith("spec.kt") || nameLc.endsWith("spec.java") || nameLc.endsWith(
                         "it.kt"
                     ) || nameLc.endsWith("it.java")
-                val mentionsClass = classNames.any { c -> nameLc.contains(c.toLowerCase()) || text.contains(c) }
-                val mentionsMethod = methodNames.any { m -> nameLc.contains(m.toLowerCase()) || text.contains(m) }
+                val mentionsClass = classNames.any { c -> nameLc.contains(c.lowercase()) || text.contains(c) }
+                val mentionsMethod = methodNames.any { m -> nameLc.contains(m.lowercase()) || text.contains(m) }
                 val score =
                     (if (hitTestWord) 60 else 0) + (if (mentionsClass) 30 else 0) + (if (mentionsMethod) 15 else 0) + min(
                         text.length,

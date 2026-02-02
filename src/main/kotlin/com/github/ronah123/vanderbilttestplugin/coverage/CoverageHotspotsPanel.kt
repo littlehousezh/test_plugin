@@ -136,14 +136,18 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
                 else
                     prompt
 
+                var error: Throwable? = null
                 val response = try {
                     client.chatOnce(promptToSend)
                 } catch (t: Throwable) {
+                    error = t
                     log.warn("Chat API failed", t)
                     "Failed to get recommendations: ${t.message}"
                 }
 
                 ApplicationManager.getApplication().invokeLater {
+                    project.getService(AIInteractionLoggerService::class.java)
+                        ?.logAiInteraction(promptToSend, response, CoverageAIConfig.MODEL_ID, CoverageAIConfig.AMPLIFY_BASE, error)
                     val shownPrompt = if (CoverageAIConfig.DEBUG_SIMPLE_PROMPT)
                         "DEBUG simple prompt:\n${CoverageAIConfig.DEBUG_SIMPLE_PROMPT_TEXT}"
                     else

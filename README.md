@@ -10,6 +10,12 @@ The project also includes some of the standard IntelliJ Platform Plugin template
 
 ---
 
+<!-- Plugin description -->
+Provides an IntelliJ Platform plugin that identifies coverage hotspots from the IDE's coverage data, shows them in a dedicated tool window, and generates AI-powered test recommendations for the most under-covered methods. Intended for educational use, it highlights weakly tested code and offers guidance without generating test code directly.
+<!-- Plugin description end -->
+
+---
+
 ## Table of Contents
 
 - [High-Level Overview](#high-level-overview)
@@ -420,5 +426,4 @@ This repository includes two key documents that support the analysis conducted i
    This document outlines the quantitative methodology used to evaluate each AI response. It describes the scoring metrics (Specificity and Actionability Score, Error Detection Score, Clarity and Structure Score, and optional Brevity Ratio), explains how each score is calculated, and provides the weighting scheme used to determine the overall effectiveness of each prompt–response pair.
 
 Together, these documents provide both the dataset and the analytical framework needed to reproduce, audit, or extend the findings of this project.
-
 
