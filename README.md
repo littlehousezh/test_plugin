@@ -1,6 +1,6 @@
 # Vanderbilt Test Plugin – Coverage Hotspots & AI Test Recommendations
 
-This repository contains **vanderbiltTestPlugin**, an IntelliJ Platform plugin written in Kotlin. The plugin’s primary goal (on the `coverageAPI`/current branch) is to help students and developers:
+This repository contains **vandytest**, an IntelliJ Platform plugin written in Kotlin. The plugin’s primary goal (on the `coverageAPI`/current branch) is to help students and developers:
 
 - Identify **coverage hotspots** (methods with poor test coverage) using IntelliJ’s built‑in coverage data.
 - Visualize those hotspots in a dedicated tool window.
@@ -426,4 +426,3 @@ This repository includes two key documents that support the analysis conducted i
    This document outlines the quantitative methodology used to evaluate each AI response. It describes the scoring metrics (Specificity and Actionability Score, Error Detection Score, Clarity and Structure Score, and optional Brevity Ratio), explains how each score is calculated, and provides the weighting scheme used to determine the overall effectiveness of each prompt–response pair.
 
 Together, these documents provide both the dataset and the analytical framework needed to reproduce, audit, or extend the findings of this project.
-

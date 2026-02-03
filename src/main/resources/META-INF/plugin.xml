@@ -1,8 +1,8 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
     <id>com.github.ronah123.vanderbilttestplugin</id>
-    <name>vanderbiltTestPlugin</name>
-    <vendor>ronah123</vendor>
+    <name>vandytest</name>
+    <vendor>vanderbiltTestplugin</vendor>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.modules.coverage</depends>
@@ -21,6 +21,11 @@
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
+        <applicationConfigurable
+                id="vandytest.settings"
+                displayName="VandyTest AI"
+                instance="com.github.ronah123.vanderbilttestplugin.coverage.CoverageSettingsConfigurable"/>
+
         <toolWindow factoryClass="com.github.ronah123.vanderbilttestplugin.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
         <postStartupActivity implementation="com.github.ronah123.vanderbilttestplugin.startup.MyProjectActivity" />
 

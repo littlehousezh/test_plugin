@@ -16,10 +16,19 @@ object CoverageAIConfig {
     const val DEBUG_SIMPLE_PROMPT_TEXT = "What is the capital of France?"
 
     private fun loadToken(): String {
-        // 1) environment variable takes precedence
+        // 1) Prefer user-provided token from IDE Settings UI
+        runCatching {
+            val settings = com.intellij.openapi.application.ApplicationManager
+                .getApplication()
+                .getService(CoverageSettings::class.java)
+            val saved = settings?.getBearerToken().orEmpty()
+            if (saved.isNotBlank()) return saved
+        }
+
+        // 2) environment variable takes precedence over file
         System.getenv("AMPLIFY_BEARER")?.let { return it }
 
-        // 2) otherwise read from local .env file (ignored by git)
+        // 3) otherwise read from local .env file (ignored by git)
         val envFile = File("plugin.env")
         if (envFile.exists()) {
             val props = Properties()
@@ -33,7 +42,7 @@ object CoverageAIConfig {
             props.getProperty("AMPLIFY_BEARER")?.let { return it }
         }
 
-        // 3) fallback for safety
+        // 4) fallback for safety
         return "MISSING_TOKEN"
     }
 }
