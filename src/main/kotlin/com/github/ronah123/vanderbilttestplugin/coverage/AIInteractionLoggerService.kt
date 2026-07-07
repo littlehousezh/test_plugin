@@ -1,9 +1,9 @@
 package com.github.ronah123.vanderbilttestplugin.coverage
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ApplicationManager.getApplication
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -14,29 +14,21 @@ import java.time.format.DateTimeFormatter
 @Service(Service.Level.PROJECT)
 class AIInteractionLoggerService(private val project: Project) {
 
-    @Volatile
-    private var studentId: String? = null
-
-    fun requestStudentIdIfNeeded() {
+    fun requestSetupIfNeeded() {
         val app = ApplicationManager.getApplication()
         if (app.isUnitTestMode || app.isHeadlessEnvironment) return
-        if (studentId != null) return
         app.invokeLater {
-            if (studentId != null) return@invokeLater
-            val input = Messages.showInputDialog(
-                project,
-                "Enter your student ID to enable AI interaction logging.",
-                "Student ID",
-                Messages.getQuestionIcon()
-            )
-            studentId = input?.trim().takeUnless { it.isNullOrEmpty() } ?: "unknown"
+            val settings = getApplication().getService(CoverageSettings::class.java)
+            if (!settings.isConfigured()) {
+                TestCompassSetupDialog(project, settings).show()
+            }
         }
     }
 
     fun logAiInteraction(prompt: String, response: String, modelId: String, baseUrl: String, error: Throwable?) {
         val basePath = project.basePath ?: return
-        val id = studentId ?: "unknown"
-        val dir = Paths.get(basePath, ".vanderbiltTestPlugin", "logs", sanitizeId(id))
+        val id = getApplication().getService(CoverageSettings::class.java).getStudentId().ifBlank { "unknown" }
+        val dir = Paths.get(basePath, ".testcompass", "logs", sanitizeId(id))
         Files.createDirectories(dir)
 
         val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))

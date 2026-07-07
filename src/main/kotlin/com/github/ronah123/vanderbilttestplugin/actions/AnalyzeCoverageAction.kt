@@ -13,7 +13,7 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.search.GlobalSearchScope
 
-class AnalyzeCoverageAction : AnAction("Analyze Coverage (IDE API)") {
+class AnalyzeCoverageAction : AnAction("TestCompass: Analyze Coverage") {
 
     companion object {
         // Set to a positive number to cap the list, or null to show all rows.
@@ -34,9 +34,7 @@ class AnalyzeCoverageAction : AnAction("Analyze Coverage (IDE API)") {
                         """
                         No active coverage suite.
 
-                        Run tests with coverage using the IntelliJ runner:
-                        • Run Configuration → Modify Options → Code Coverage → Coverage runner: IntelliJ IDEA
-                        • Settings → Build, Execution, Deployment → Build Tools → Gradle → Run tests using: IntelliJ IDEA
+                        Run All Tests with Coverage, then run TestCompass again.
                         """.trimIndent()
                     )
                     return
@@ -75,7 +73,7 @@ class AnalyzeCoverageAction : AnAction("Analyze Coverage (IDE API)") {
 
     private fun info(project: Project, text: String) {
         ApplicationManager.getApplication().invokeLater {
-            Messages.showInfoMessage(project, text, "Coverage Analysis")
+            Messages.showInfoMessage(project, text, "TestCompass")
         }
     }
 

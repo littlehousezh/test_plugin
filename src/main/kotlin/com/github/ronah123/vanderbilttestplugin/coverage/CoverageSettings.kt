@@ -6,12 +6,13 @@ import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
 
 @State(
-    name = "VandyTestSettings",
-    storages = [Storage("vandytest.xml")]
+    name = "TestCompassSettings",
+    storages = [Storage("testcompass.xml")]
 )
 @Service(Service.Level.APP)
 class CoverageSettings : PersistentStateComponent<CoverageSettings.State> {
     data class State(
+        var studentId: String = "",
         var amplifyBearer: String = ""
     )
 
@@ -28,4 +29,12 @@ class CoverageSettings : PersistentStateComponent<CoverageSettings.State> {
     fun setBearerToken(token: String) {
         state.amplifyBearer = token.trim()
     }
+
+    fun getStudentId(): String = state.studentId.trim()
+
+    fun setStudentId(studentId: String) {
+        state.studentId = studentId.trim()
+    }
+
+    fun isConfigured(): Boolean = getStudentId().isNotBlank() && getBearerToken().isNotBlank()
 }

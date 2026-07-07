@@ -9,6 +9,7 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.application.ApplicationManager.getApplication
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.ui.ScrollPaneFactory
@@ -39,7 +40,7 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
     private val table = JBTable(model).apply {
         setShowGrid(false)
         autoCreateRowSorter = true
-        emptyText.text = "No data yet — run the action to analyze coverage."
+        emptyText.text = "No data yet - run TestCompass coverage analysis."
         TableSpeedSearch(this as JTable)
         addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
@@ -55,10 +56,10 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
     private val header = JBPanelWithEmptyText().apply {
         layout = BorderLayout()
         border = JBUI.Borders.empty(6, 8)
-        add(JBLabel("Coverage hotspots in project scope"), BorderLayout.WEST)
+        add(JBLabel("TestCompass coverage hotspots"), BorderLayout.WEST)
 
         val generateBtn = JButton("Generate recommendations").apply {
-            toolTipText = "Use ChatGPT wrapper to suggest better tests for top methods"
+            toolTipText = "Use Amplify to suggest better tests for top methods"
             addActionListener { onGenerateRecommendationsClicked() }
         }
         add(generateBtn, BorderLayout.EAST)
@@ -90,9 +91,21 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
     }
 
     private fun onGenerateRecommendationsClicked() {
+        val settings = getApplication().getService(CoverageSettings::class.java)
+        if (!settings.isConfigured()) {
+            if (!TestCompassSetupDialog(project, settings).showAndGet() || !settings.isConfigured()) {
+                Messages.showInfoMessage(
+                    project,
+                    "Enter your student ID and Amplify token to generate recommendations.",
+                    "TestCompass Setup"
+                )
+                return
+            }
+        }
+
         val total = model.rowCount
         if (total == 0) {
-            Messages.showInfoMessage(project, "Run coverage analysis first.", "Coverage")
+            Messages.showInfoMessage(project, "Run TestCompass coverage analysis first.", "TestCompass")
             return
         }
 
@@ -127,7 +140,7 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
 
                 val client: ChatClient = AmplifyChatClient(
                     CoverageAIConfig.AMPLIFY_BASE,
-                    CoverageAIConfig.AMPLIFY_BEARER,
+                    CoverageAIConfig.getAmplifyBearer(),
                     CoverageAIConfig.MODEL_ID
                 )
 
@@ -161,7 +174,7 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
 
     private fun info(text: String) {
         ApplicationManager.getApplication().invokeLater {
-            Messages.showInfoMessage(project, text, "Coverage Recommender")
+            Messages.showInfoMessage(project, text, "TestCompass")
         }
     }
 }

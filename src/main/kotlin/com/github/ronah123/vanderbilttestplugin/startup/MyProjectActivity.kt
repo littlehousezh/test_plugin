@@ -7,6 +7,6 @@ import com.github.ronah123.vanderbilttestplugin.coverage.AIInteractionLoggerServ
 class MyProjectActivity : ProjectActivity {
 
     override suspend fun execute(project: Project) {
-        project.getService(AIInteractionLoggerService::class.java)?.requestStudentIdIfNeeded()
+        project.getService(AIInteractionLoggerService::class.java)?.requestSetupIfNeeded()
     }
 }

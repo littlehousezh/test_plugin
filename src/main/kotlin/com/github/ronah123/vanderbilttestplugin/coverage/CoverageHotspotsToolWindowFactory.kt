@@ -19,6 +19,6 @@ class CoverageHotspotsToolWindowFactory : ToolWindowFactory {
     }
 
     companion object {
-        const val ID = "Coverage Hotspots"
+        const val ID = "TestCompass"
     }
 }
