@@ -19,7 +19,7 @@ Provides an IntelliJ Platform plugin that identifies coverage hotspots from the 
 
 When IntelliJ opens a project after installation, TestCompass shows a setup dialog. Enter:
 
-- `Student ID`: your course or assignment student identifier.
+- `Student ID`: your student identifier.
 - `Amplify token`: the token provided by the instructor.
 
 You can update these later in `Settings > Tools > TestCompass` or by searching `TestCompass` in IntelliJ settings.
@@ -37,16 +37,9 @@ You can update these later in `Settings > Tools > TestCompass` or by searching `
 6. Review the ranked methods with the most missed coverage.
 7. Click `Generate recommendations` to receive guidance for improving tests.
 8. Use the recommendations to decide what behaviors, edge cases, and assertions to add.
-9. Re-run tests with coverage and run TestCompass again to check improvement.
+9. Re-run tests with coverage and run TestCompass again to check the improvement.
 
 TestCompass requires an active IntelliJ coverage suite. If it says `No active coverage suite`, run tests with coverage first and then run `Tools > TestCompass: Analyze Coverage` again.
-
-## Notes For Instructors
-
-- The plugin gives conceptual testing advice; it is designed not to write complete test code for students.
-- AI interactions are logged under the opened project in `.testcompass/logs/<student-id>/`.
-- The plugin ID is currently `com.github.ronah123.vanderbilttestplugin` so uploaded versions continue to match the existing Marketplace listing.
-- The visible plugin name is `TestCompass`.
 
 ## Build For Marketplace
 
@@ -61,5 +54,3 @@ The uploadable Marketplace ZIP is generated in:
 ```text
 build/distributions/
 ```
-
-Do not upload a manually compressed source folder. Upload the generated plugin ZIP.
