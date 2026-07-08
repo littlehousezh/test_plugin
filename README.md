@@ -23,7 +23,7 @@ When IntelliJ opens a project after installation, TestCompass shows a setup dial
 
 You can update these later in `Settings > Tools > TestCompass` or by searching `TestCompass` in IntelliJ settings.
 
-## Student Workflow
+## Workflow
 
 1. Open the assignment project in IntelliJ IDEA.
 2. Open or create the JUnit test file for the assignment.
@@ -36,17 +36,10 @@ You can update these later in `Settings > Tools > TestCompass` or by searching `
 6. Review the ranked methods with the most missed coverage.
 7. Click `Generate recommendations` to receive guidance for improving tests.
 8. Use the recommendations to decide what behaviors, edge cases, and assertions to add.
-9. Re-run tests with coverage and run TestCompass again to check improvement.
+9. Re-run tests with coverage and run TestCompass again to check for improvement.
 
 TestCompass requires an active IntelliJ coverage suite. If it says `No active coverage suite`, run tests with coverage first and then run `Tools > TestCompass` again.
 
-## Notes For Instructors
-
-- The plugin gives conceptual testing advice; it is designed not to write complete test code for students.
-- AI interactions are logged under the opened project in `.testcompass/logs/`.
-- Students can rename the submitted log file with their student ID if required by the course.
-- The plugin ID is currently `com.github.ronah123.vanderbilttestplugin` so uploaded versions continue to match the existing Marketplace listing.
-- The visible plugin name is `TestCompass`.
 
 ## Build For Marketplace
 
@@ -61,5 +54,3 @@ The uploadable Marketplace ZIP is generated in:
 ```text
 build/distributions/
 ```
-
-Do not upload a manually compressed source folder. Upload the generated plugin ZIP.
