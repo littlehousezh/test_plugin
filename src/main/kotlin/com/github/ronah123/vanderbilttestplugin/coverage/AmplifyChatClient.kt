@@ -43,6 +43,14 @@ class AmplifyChatClient(
             return res.body
         }
 
+        if (res.status == 401) {
+            return """
+                Amplify authentication failed (HTTP 401).
+
+                Check TestCompass settings and make sure the Amplify token is current and pasted as the raw token only, without quotes or an extra "Bearer " prefix.
+            """.trimIndent()
+        }
+
         return errorDump("Chat API request failed", res, payload)
     }
 

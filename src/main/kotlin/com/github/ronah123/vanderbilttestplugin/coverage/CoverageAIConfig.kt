@@ -20,12 +20,12 @@ object CoverageAIConfig {
             val settings = com.intellij.openapi.application.ApplicationManager
                 .getApplication()
                 .getService(CoverageSettings::class.java)
-            val saved = settings?.getBearerToken().orEmpty()
+            val saved = AmplifyToken.normalize(settings?.getBearerToken().orEmpty())
             if (saved.isNotBlank()) return saved
         }
 
         // 2) environment variable takes precedence over file
-        System.getenv("AMPLIFY_BEARER")?.let { return it }
+        System.getenv("AMPLIFY_BEARER")?.let { return AmplifyToken.normalize(it) }
 
         // 3) otherwise read from local .env file (ignored by git)
         val envFile = File("plugin.env")
@@ -38,7 +38,7 @@ object CoverageAIConfig {
                     props[k.trim()] = v.trim()
                 }
             }
-            props.getProperty("AMPLIFY_BEARER")?.let { return it }
+            props.getProperty("AMPLIFY_BEARER")?.let { return AmplifyToken.normalize(it) }
         }
 
         // 4) fallback for safety

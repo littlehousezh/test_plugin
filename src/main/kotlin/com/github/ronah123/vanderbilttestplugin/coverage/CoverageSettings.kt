@@ -24,10 +24,10 @@ class CoverageSettings : PersistentStateComponent<CoverageSettings.State> {
         this.state = state
     }
 
-    fun getBearerToken(): String = state.amplifyBearer.trim()
+    fun getBearerToken(): String = AmplifyToken.normalize(state.amplifyBearer)
 
     fun setBearerToken(token: String) {
-        state.amplifyBearer = token.trim()
+        state.amplifyBearer = AmplifyToken.normalize(token)
     }
 
     fun getStudentId(): String = state.studentId.trim()
