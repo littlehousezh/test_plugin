@@ -25,7 +25,6 @@ import javax.swing.JButton
 import javax.swing.JPanel
 import javax.swing.JTable
 import javax.swing.table.DefaultTableModel
-import kotlin.math.min
 
 class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout()) {
 
@@ -36,6 +35,7 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
     ) {
         override fun isCellEditable(row: Int, column: Int) = false
     }
+    private var currentRows: List<MethodHit> = emptyList()
 
     private val table = JBTable(model).apply {
         setShowGrid(false)
@@ -72,6 +72,7 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
     }
 
     fun setData(rows: List<MethodHit>) {
+        currentRows = rows
         model.rowCount = 0
         rows.forEachIndexed { idx, m ->
             val pct = if (m.totalLines == 0) 100.0 else (m.coveredLines * 100.0 / m.totalLines)
@@ -109,12 +110,18 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
             return
         }
 
-        val count = min(CoverageAIConfig.MAX_METHODS_TO_REVIEW, total)
-        val pairs = (0 until count).mapNotNull { rowIdx ->
-            val fqnAndMethod = model.getValueAt(rowIdx, 3)?.toString() ?: return@mapNotNull null
-            val fqn = fqnAndMethod.substringBefore('#')
-            val methodKey = fqnAndMethod.substringAfter('#', "")
-            if (fqn.isBlank() || methodKey.isBlank()) null else (fqn to methodKey)
+        val selectedHits = currentRows.asSequence()
+            .filter { it.missedLines > 0 }
+            .take(CoverageAIConfig.MAX_METHODS_TO_REVIEW)
+            .toList()
+
+        if (selectedHits.isEmpty()) {
+            Messages.showInfoMessage(
+                project,
+                "No missed production lines were found in the current coverage hotspots. There are no coverage-driven recommendations to generate.",
+                "TestCompass"
+            )
+            return
         }
 
         object : Task.Backgroundable(project, "Generating test recommendations", true) {
@@ -123,9 +130,9 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
                 indicator.text = "Collecting source & tests…"
 
                 // Compute BOTH the method bundles and the single test file inside a ReadAction.
-                val (bundles, testFile) = ReadAction.compute<Pair<List<MethodBundle>, TestFileBundle?>, RuntimeException> {
-                    val bs = CodeExtraction.resolveTopBundles(project, pairs)
-                    val tf = CodeExtraction.resolveSingleTestFile(project, bs)
+                val (bundles, testFiles) = ReadAction.compute<Pair<List<MethodCoverageBundle>, List<TestFileBundle>>, RuntimeException> {
+                    val bs = CodeExtraction.resolveTopBundles(project, selectedHits)
+                    val tf = CodeExtraction.resolveRelevantTestFiles(project, bs)
                     bs to tf
                 }
 
@@ -135,8 +142,7 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
                 }
 
                 indicator.text = "Calling Chat API…"
-                // NOTE: buildPrompt now requires the testFile bundle as 2nd param.
-                val prompt = CodeExtraction.buildPrompt(bundles, testFile)
+                val prompt = CodeExtraction.buildPrompt(bundles, testFiles)
                 val amplifyBase = CoverageAIConfig.getAmplifyBase()
                 val modelId = CoverageAIConfig.getModelId()
 

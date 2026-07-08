@@ -202,25 +202,31 @@ class AnalyzeCoverageAction : AnAction("TestCompass") {
                 (getLines.invoke(classData) as? Array<Any?>) ?: emptyArray()
             if (linesArray.isEmpty()) continue
 
-            val byMethod = linesArray.filterNotNull().groupBy { ld ->
+            val byMethod = linesArray.mapIndexedNotNull { index, ld ->
+                ld ?: return@mapIndexedNotNull null
                 val sig = try { getMethodSignature?.invoke(ld) as? String } catch (_: Throwable) { null }
                 val name = try { getMethodName?.invoke(ld) as? String } catch (_: Throwable) { null }
-                when {
+                val methodId = when {
                     !sig.isNullOrBlank() -> sig
                     !name.isNullOrBlank() -> name
                     else -> "<unknown>"
                 }
-            }
+                val hits = try { (getHits.invoke(ld) as? Int) ?: 0 } catch (_: Throwable) { 0 }
+                val lineNumber = extractLineNumber(ld) ?: index.takeIf { it > 0 }
+                CoveredLine(methodId, hits, lineNumber)
+            }.groupBy { it.methodId }
 
             for ((mName, mLines) in byMethod) {
                 val total = mLines.size
-                var covered = 0
-                for (ld in mLines) {
-                    val hits = try { (getHits.invoke(ld) as? Int) ?: 0 } catch (_: Throwable) { 0 }
-                    if (hits > 0) covered++
-                }
+                val covered = mLines.count { it.hits > 0 }
                 val missed = total - covered
                 val pct = if (total == 0) 1.0 else covered.toDouble() / total
+                val missedLineNumbers = mLines.asSequence()
+                    .filter { it.hits == 0 }
+                    .mapNotNull { it.lineNumber }
+                    .distinct()
+                    .sorted()
+                    .toList()
 
                 out += MethodHit(
                     classFqn = fqn,
@@ -228,7 +234,8 @@ class AnalyzeCoverageAction : AnAction("TestCompass") {
                     totalLines = total,
                     coveredLines = covered,
                     missedLines = missed,
-                    linePct = pct
+                    linePct = pct,
+                    missedLineNumbers = missedLineNumbers
                 )
             }
         }
@@ -274,21 +281,28 @@ class AnalyzeCoverageAction : AnAction("TestCompass") {
             }
             if (linesArray.isEmpty()) continue
 
-            val byMethod = linesArray.filterNotNull().groupBy { extractMethodId(it) }
+            val byMethod = linesArray.mapIndexedNotNull { index, ld ->
+                ld ?: return@mapIndexedNotNull null
+                val hits = try {
+                    (ld.javaClass.getMethod("getHits").invoke(ld) as? Int) ?: 0
+                } catch (_: Throwable) {
+                    0
+                }
+                val lineNumber = extractLineNumber(ld) ?: index.takeIf { it > 0 }
+                CoveredLine(extractMethodId(ld), hits, lineNumber)
+            }.groupBy { it.methodId }
 
             for ((mName, mLines) in byMethod) {
                 val total = mLines.size
-                var covered = 0
-                for (ld in mLines) {
-                    val hits = try {
-                        (ld!!.javaClass.getMethod("getHits").invoke(ld) as? Int) ?: 0
-                    } catch (_: Throwable) {
-                        0
-                    }
-                    if (hits > 0) covered++
-                }
+                val covered = mLines.count { it.hits > 0 }
                 val missed = total - covered
                 val pct = if (total == 0) 1.0 else covered.toDouble() / total
+                val missedLineNumbers = mLines.asSequence()
+                    .filter { it.hits == 0 }
+                    .mapNotNull { it.lineNumber }
+                    .distinct()
+                    .sorted()
+                    .toList()
 
                 out += MethodHit(
                     classFqn = fqn,
@@ -296,7 +310,8 @@ class AnalyzeCoverageAction : AnAction("TestCompass") {
                     totalLines = total,
                     coveredLines = covered,
                     missedLines = missed,
-                    linePct = pct
+                    linePct = pct,
+                    missedLineNumbers = missedLineNumbers
                 )
             }
         }
@@ -329,6 +344,30 @@ class AnalyzeCoverageAction : AnAction("TestCompass") {
 
         return "<unknown>"
     }
+
+    private fun extractLineNumber(ld: Any): Int? {
+        listOf("getLineNumber", "getLine").forEach { methodName ->
+            try {
+                val value = ld.javaClass.getMethod(methodName).invoke(ld) as? Int
+                if (value != null && value > 0) return value
+            } catch (_: Throwable) {}
+        }
+
+        listOf("lineNumber", "line").forEach { fieldName ->
+            try {
+                val value = ld.javaClass.getDeclaredField(fieldName).apply { isAccessible = true }.get(ld) as? Int
+                if (value != null && value > 0) return value
+            } catch (_: Throwable) {}
+        }
+
+        return null
+    }
+
+    private data class CoveredLine(
+        val methodId: String,
+        val hits: Int,
+        val lineNumber: Int?
+    )
 }
 
 // Simple DTO for ranked output
@@ -338,5 +377,6 @@ data class MethodHit(
     val totalLines: Int,
     val coveredLines: Int,
     val missedLines: Int,
-    val linePct: Double
+    val linePct: Double,
+    val missedLineNumbers: List<Int> = emptyList()
 )

@@ -40,6 +40,8 @@ You can update these later in `Settings > Tools > TestCompass` or by searching `
 
 TestCompass requires an active IntelliJ coverage suite. If it says `No active coverage suite`, run tests with coverage first and then run `Tools > TestCompass` again.
 
+Recommendations are coverage-driven: TestCompass sends missed production line metadata, relevant source snippets, and up to three matching test files to the configured AI service. Methods with no missed production lines are skipped so the generated guidance stays focused on uncovered behavior and avoids duplicating tests that already exist.
+
 
 ## Build For Marketplace
 

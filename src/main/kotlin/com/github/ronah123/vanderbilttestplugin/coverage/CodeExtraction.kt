@@ -1,9 +1,11 @@
 package com.github.ronah123.vanderbilttestplugin.coverage
 
+import com.github.ronah123.vanderbilttestplugin.actions.MethodHit
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.search.FilenameIndex
@@ -11,7 +13,17 @@ import com.intellij.psi.search.GlobalSearchScope
 import kotlin.math.min
 
 data class MethodBundle(
-    val classFqn: String, val methodName: String, val methodText: String
+    val classFqn: String,
+    val methodName: String,
+    val methodText: String,
+    val sourceFilePath: String?,
+    val startLine: Int?,
+    val endLine: Int?
+)
+
+data class MethodCoverageBundle(
+    val hit: MethodHit,
+    val method: MethodBundle
 )
 
 data class TestFileBundle(
@@ -20,24 +32,30 @@ data class TestFileBundle(
 
 object CodeExtraction {
 
-    fun resolveTopBundles(project: Project, fqnAndMethodKeys: List<Pair<String, String>>): List<MethodBundle> {
-        return fqnAndMethodKeys.mapNotNull { (fqn, methodKey) ->
-            resolveMethodBundle(project, fqn, methodKey)
+    fun resolveTopBundles(project: Project, hits: List<MethodHit>): List<MethodCoverageBundle> {
+        return hits.mapNotNull { hit ->
+            resolveMethodBundle(project, hit.classFqn, hit.method)?.let { MethodCoverageBundle(hit, it) }
         }
     }
 
     /**
-     * Resolve ONE test file for the whole prompt.
-     * If you want a specific preference (e.g., “StringJrTest”), pass method bundles so
-     * we can bias by the involved class/method names. Returns full file text (no slicing).
+     * Resolve the most relevant student test files for the whole prompt.
+     *
+     * Some assignments split tests across multiple files. We include a small ranked set so
+     * recommendations can avoid duplicating behavior that is covered outside the single
+     * best-named test file. In one-test-file projects, this still returns just that file.
      */
-    fun resolveSingleTestFile(project: Project, bundles: List<MethodBundle>): TestFileBundle {
-        val classNames = bundles.mapNotNull { simpleClassName(it.classFqn) }.toSet()
-        val methodNames = bundles.map { it.methodName }.toSet()
-        val result = findBestTestFile(project, classNames, methodNames) ?: return TestFileBundle(null, null)
-        return TestFileBundle(
-            testFilePath = result.virtualFile?.path, testFileText = result.text // full text, no slicing
-        )
+    fun resolveRelevantTestFiles(project: Project, bundles: List<MethodCoverageBundle>): List<TestFileBundle> {
+        val classNames = bundles.mapNotNull { simpleClassName(it.method.classFqn) }.toSet()
+        val methodNames = bundles.map { it.method.methodName }.toSet()
+        return findRelevantTestFiles(project, classNames, methodNames)
+            .take(CoverageAIConfig.MAX_TEST_FILES_TO_INCLUDE)
+            .map {
+                TestFileBundle(
+                    testFilePath = it.virtualFile?.path,
+                    testFileText = it.text.take(CoverageAIConfig.MAX_TEST_FILE_CHARS)
+                )
+            }
     }
 
     private fun resolveMethodBundle(project: Project, classFqn: String, methodKey: String): MethodBundle? {
@@ -76,8 +94,16 @@ object CodeExtraction {
         } ?: return null
 
         val methodText = chosen.text.take(CoverageAIConfig.MAX_METHOD_CHARS)
+        val document = PsiDocumentManager.getInstance(project).getDocument(chosen.containingFile)
+        val startLine = document?.getLineNumber(chosen.textRange.startOffset)?.plus(1)
+        val endLine = document?.getLineNumber(chosen.textRange.endOffset)?.plus(1)
         return MethodBundle(
-            classFqn = classFqn, methodName = if (isCtor) "<init>" else parsedName, methodText = methodText
+            classFqn = classFqn,
+            methodName = if (isCtor) "<init>" else parsedName,
+            methodText = methodText,
+            sourceFilePath = chosen.containingFile?.virtualFile?.path,
+            startLine = startLine,
+            endLine = endLine
         )
     }
 
@@ -134,15 +160,15 @@ object CodeExtraction {
     }
 
     /**
-     * Find a single likely test PsiFile anywhere in project content.
+     * Find likely test PsiFiles anywhere in project content.
      * Preference order:
      *  1) Exact "<ClassName>Test.(kt|java)" for any of the involved classes
      *  2) Any *test-ish* file (.kt/.java) whose name mentions a class/method or ends with Spec/IT
-     *  3) Otherwise, highest-scoring candidate by heuristic
+     *  3) Highest-scoring candidates by heuristic
      */
-    private fun findBestTestFile(
+    private fun findRelevantTestFiles(
         project: Project, classNames: Set<String>, methodNames: Set<String>
-    ): PsiFile? {
+    ): List<PsiFile> {
         val index = ProjectFileIndex.getInstance(project)
         val scope = GlobalSearchScope.projectScope(project)
 
@@ -150,9 +176,10 @@ object CodeExtraction {
         val exactNames = classNames.flatMap { simple ->
             listOf("${simple}Test.kt", "${simple}Test.java")
         }
-        exactNames.forEach { nm ->
-            val pf = FilenameIndex.getFilesByName(project, nm, scope).firstOrNull()?.containingFile
-            if (pf != null && pf.virtualFile?.let(index::isInContent) == true) return pf
+        val exactMatches = exactNames.flatMap { nm ->
+            FilenameIndex.getFilesByName(project, nm, scope).mapNotNull { psiFile ->
+                psiFile.takeIf { it.virtualFile?.let(index::isInContent) == true }
+            }
         }
 
         // 2) Otherwise, rank all .kt/.java that look like tests
@@ -175,69 +202,115 @@ object CodeExtraction {
                     ) || nameLc.endsWith("it.java")
                 val mentionsClass = classNames.any { c -> nameLc.contains(c.lowercase()) || text.contains(c) }
                 val mentionsMethod = methodNames.any { m -> nameLc.contains(m.lowercase()) || text.contains(m) }
+                val importsJunit = text.contains("org.junit") || text.contains("@Test")
                 val score =
-                    (if (hitTestWord) 60 else 0) + (if (mentionsClass) 30 else 0) + (if (mentionsMethod) 15 else 0) + min(
-                        text.length,
-                        200_000
-                    ) / 10
+                    (if (hitTestWord) 60 else 0) +
+                        (if (mentionsClass) 40 else 0) +
+                        (if (mentionsMethod) 15 else 0) +
+                        (if (importsJunit) 20 else 0) +
+                        min(text.length, 20_000) / 1000
                 Triple(pf, text, score)
-            }.sortedByDescending { it.third }.toList()
+            }
+            .filter { (_, _, score) -> score >= 80 }
+            .sortedWith(compareByDescending<Triple<PsiFile, String, Int>> { it.third }.thenBy { it.first.name })
+            .map { it.first }
+            .toList()
 
-        return candidates.firstOrNull()?.first
+        return (exactMatches + candidates).distinctBy { it.virtualFile?.path ?: it.name }
     }
 
     // ====================== Prompt building ======================
 
     /**
      * Build a prompt that includes:
-     *   - ONE test file (full text) at the top if found
+     *   - Relevant test files at the top if found
      *   - Then each production method to review
      *
      * Global trimming only applies to the combined result (we never trim the method texts).
      */
-    fun buildPrompt(bundles: List<MethodBundle>, testFile: TestFileBundle?): String {
+    fun buildPrompt(bundles: List<MethodCoverageBundle>, testFiles: List<TestFileBundle>): String {
         val header = """
-You are helping a student improve unit tests.
+You are helping a student improve unit tests using IDE coverage results.
 
-FIRST, here is the current test file for context (if present). Use it to understand what's already covered.
-THEN, for each production method below:
-  1) Identify gaps in the current tests.
-  2) Create a checklist of test cases to add, focusing on edge cases, error conditions, and important scenarios. Note that we do not want to actually give the student test code, but merely provided a conceptual outline for cases that they could test.
-If a test file isn't found, simply report that you could not find any existing tests.
-Keep the advice concise and actionable.
+Use the current test file, production source, and coverage hotspot metadata together. The coverage hotspot metadata is the source of truth for what needs coverage-driven recommendations.
 
-Additionally, if any tests are commented out and target a core functionality that should be tested, treat the functionality as untested (that is, address it in your response, and note to the user that this functionality has tried to be tested but is currently commented out).
+Coverage-specific rules:
+- Recommend only conceptual test cases that address missed or partially covered lines/branches shown in the hotspot metadata.
+- If a method has 0 missed lines or 100% coverage, say that no coverage-driven recommendation is needed for that method.
+- Do not propose implementation validation, robustness, invalid-input, or exception tests unless they correspond to missed coverage, an assignment requirement visible in the tests/source, or a clearly observed bug path.
+- Avoid duplicating behavior already covered by the current test file.
+- For private methods, recommend tests through public behavior rather than direct private-method calls.
+- Do not write test code. Provide names and behavior/assertion outlines only.
+- Keep the advice concise and actionable.
 
-Here are some guidelines to implement as you generate your advice for the student:
-Each test case should be executable, meaning it has an @Test annotation and can be run via “Run as JUnit Test.” It should include at least one assert statement or assert that an exception is thrown, and it should evaluate or test only one method. Additionally, each test case could be descriptively named and commented. When a single test case contains too many assert statements—typically more than five—it may be beneficial to split it up so that each test evaluates only one specific behavior.
-The test suite as a whole should include at least one test for each requirement. It should also contain a fault-revealing test for each bug in the code—that is, a test that is expected to fail when the bug is present. For every requirement, the test suite should include test cases covering valid inputs, boundary cases, invalid inputs, and expected exceptions. 
+If a test file isn't found, say that no existing tests were found and base recommendations only on coverage/source.
 
-As you generate your advice for the student, utilize the above guidelines to develop structure in your response. Each element of your response for a proposed test case should follow these guidelines -- have a name, a concrete behavior it is testing, etc. Try to keep your advice for each method and specific test case as structured and specific as possible without writing the code for the student.
+Additionally, if any tests are commented out and target a core functionality that should be tested, treat the functionality as untested and note that it was attempted but is currently commented out.
+
+Keep this checklist as quality criteria for each suggested test case:
+- Each test case should be executable, meaning it has an @Test annotation and can be run via “Run as JUnit Test.”
+- Each test case should include at least one assert statement or assert that an exception is thrown. Example assert statements include assertTrue, assertFalse, and assertEquals. For asserting an exception is thrown, use assertThrows in JUnit 5.
+- Each test case should focus on one behavior. It does not need to call only one implementation method when the relevant method is private.
+- Each test case could be descriptively named and commented.
+- If there is redundant setup code in multiple test cases, suggest extracting it into a common method, such as @BeforeEach.
+- If there are too many assert statements in a single test case, such as more than 5, suggest splitting it so each test evaluates one behavior.
+
+Keep this checklist as quality criteria for the test suite, but do not let it override the coverage-specific rules:
+- The test suite should have at least one test for each assignment requirement visible from the project context.
+- The test suite should appropriately use setup and teardown code, such as @BeforeEach, when it improves clarity.
+- The test suite should contain a fault-revealing test for each confirmed or strongly evidenced bug in the code.
+- For each requirement, include valid inputs, boundary cases, invalid inputs, and expected exceptions only where those categories are meaningful for that requirement and relevant to missed coverage or assignment behavior.
 
 """.trimIndent()
 
         val sb = StringBuilder()
         sb.appendLine(header)
 
-        // One test file, once.
-        if (testFile?.testFileText != null) {
+        // Relevant test files, once each.
+        if (testFiles.any { it.testFileText != null }) {
             sb.appendLine()
-            sb.appendLine("===== Current test file: ${testFile.testFilePath} =====")
-            sb.appendLine(fence(testFile.testFileText, testFile.testFilePath))
+            sb.appendLine("===== Current relevant test files =====")
+            testFiles.filter { it.testFileText != null }.forEachIndexed { index, testFile ->
+                sb.appendLine()
+                sb.appendLine("----- Test file ${index + 1}: ${testFile.testFilePath} -----")
+                sb.appendLine(fence(testFile.testFileText.orEmpty(), testFile.testFilePath))
+            }
         } else {
             sb.appendLine()
-            sb.appendLine("===== No test file found in project content =====")
+            sb.appendLine("===== No relevant test files found in project content =====")
+        }
+
+        sb.appendLine()
+        sb.appendLine("===== Coverage hotspots selected for recommendation =====")
+        bundles.forEachIndexed { i, b ->
+            sb.appendLine(
+                "${i + 1}. ${b.hit.classFqn}#${b.hit.method}: " +
+                    "${b.hit.missedLines}/${b.hit.totalLines} missed, " +
+                    "${String.format("%.1f", b.hit.linePct * 100.0)}% covered"
+            )
+            if (b.hit.missedLineNumbers.isNotEmpty()) {
+                sb.appendLine("   Missed lines: ${b.hit.missedLineNumbers.joinToString(", ")}")
+            }
         }
 
         bundles.forEachIndexed { i, b ->
             sb.appendLine()
-            sb.appendLine("=== Method ${i + 1}: ${b.classFqn}#${b.methodName} ===")
+            sb.appendLine("=== Method ${i + 1}: ${b.hit.classFqn}#${b.hit.method} ===")
+            sb.appendLine("----- Coverage hotspot metadata -----")
+            sb.appendLine("Missed/Total lines: ${b.hit.missedLines}/${b.hit.totalLines}")
+            sb.appendLine("Line coverage: ${String.format("%.1f", b.hit.linePct * 100.0)}%")
+            if (b.hit.missedLineNumbers.isNotEmpty()) {
+                sb.appendLine("Missed source lines:")
+                sb.appendLine(missedLineDetails(b))
+            } else {
+                sb.appendLine("Missed source lines: not available from the active coverage suite.")
+            }
             sb.appendLine("----- Production method -----")
-            sb.appendLine(fence(b.methodText, b.classFqn))
+            sb.appendLine(fence(b.method.methodText, b.method.sourceFilePath ?: b.method.classFqn))
         }
 
         // Enforce a single global budget: if needed, trim ONLY the test file portion.
-        return enforceGlobalBudget(sb.toString(), testFile)
+        return enforceGlobalBudget(sb.toString())
     }
 
     private fun fence(code: String, hint: String?): String {
@@ -254,32 +327,43 @@ As you generate your advice for the student, utilize the above guidelines to dev
      * shrink only the test file block (from the bottom). This matches your “include once”
      * requirement while still guaranteeing the call will fit.
      */
-    private fun enforceGlobalBudget(full: String, testFile: TestFileBundle?): String {
+    private fun enforceGlobalBudget(full: String): String {
         if (full.length <= CoverageAIConfig.MAX_PROMPT_CHARS) return full
-        if (testFile?.testFileText.isNullOrEmpty()) return full.take(CoverageAIConfig.MAX_PROMPT_CHARS)
 
-        val marker = "===== Current test file: ${testFile?.testFilePath} ====="
+        val marker = "===== Current relevant test files ====="
+        val nextMarker = "===== Coverage hotspots selected for recommendation ====="
         val start = full.indexOf(marker)
+        val end = full.indexOf(nextMarker)
         if (start < 0) return full.take(CoverageAIConfig.MAX_PROMPT_CHARS)
+        if (end <= start) return full.take(CoverageAIConfig.MAX_PROMPT_CHARS)
 
-        val fenceStart = full.indexOf("```", start)
-        val fenceEnd = full.indexOf("```", fenceStart + 3)
-        if (fenceStart < 0 || fenceEnd < 0) return full.take(CoverageAIConfig.MAX_PROMPT_CHARS)
-
-        val before = full.substring(0, fenceStart + 3) // include opening ```
-        val testBody = full.substring(fenceStart + 3, fenceEnd)
-        val after = full.substring(fenceEnd) // includes closing ```
+        val before = full.substring(0, start + marker.length)
+        val testBody = full.substring(start + marker.length, end)
+        val after = full.substring(end)
 
         // Binary search the largest keep of testBody that fits.
         var lo = 0
         var hi = testBody.length
-        fun build(mid: Int) = before + testBody.take(mid) + "\n… [truncated test file]\n" + after
+        fun build(mid: Int) = before + testBody.take(mid) + "\n... [truncated relevant test files]\n" + after
         while (lo < hi) {
             val mid = (lo + hi + 1) / 2
             val cand = build(mid)
             if (cand.length <= CoverageAIConfig.MAX_PROMPT_CHARS) lo = mid else hi = mid - 1
         }
         return build(lo)
+    }
+
+    private fun missedLineDetails(bundle: MethodCoverageBundle): String {
+        val startLine = bundle.method.startLine ?: return bundle.hit.missedLineNumbers.joinToString("\n") { "line $it" }
+        val sourceLines = bundle.method.methodText.lines()
+        return bundle.hit.missedLineNumbers.joinToString("\n") { lineNumber ->
+            val offset = lineNumber - startLine
+            if (offset in sourceLines.indices) {
+                "line $lineNumber: ${sourceLines[offset].trim()}"
+            } else {
+                "line $lineNumber"
+            }
+        }
     }
 
 }
