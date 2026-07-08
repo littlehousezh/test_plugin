@@ -282,6 +282,4 @@ As you generate your advice for the student, utilize the above guidelines to dev
         return build(lo)
     }
 
-    fun promptPreview(full: String, maxChars: Int = 3000): String =
-        if (full.length <= maxChars) full else full.take(maxChars) + "\n\n… [truncated]"
 }

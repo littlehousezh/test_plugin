@@ -137,11 +137,13 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
                 indicator.text = "Calling Chat API…"
                 // NOTE: buildPrompt now requires the testFile bundle as 2nd param.
                 val prompt = CodeExtraction.buildPrompt(bundles, testFile)
+                val amplifyBase = CoverageAIConfig.getAmplifyBase()
+                val modelId = CoverageAIConfig.getModelId()
 
                 val client: ChatClient = AmplifyChatClient(
-                    CoverageAIConfig.AMPLIFY_BASE,
+                    amplifyBase,
                     CoverageAIConfig.getAmplifyBearer(),
-                    CoverageAIConfig.MODEL_ID
+                    modelId
                 )
 
                 val promptToSend = if (CoverageAIConfig.DEBUG_SIMPLE_PROMPT)
@@ -160,12 +162,8 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
 
                 ApplicationManager.getApplication().invokeLater {
                     project.getService(AIInteractionLoggerService::class.java)
-                        ?.logAiInteraction(promptToSend, response, CoverageAIConfig.MODEL_ID, CoverageAIConfig.AMPLIFY_BASE, error)
-                    val shownPrompt = if (CoverageAIConfig.DEBUG_SIMPLE_PROMPT)
-                        "DEBUG simple prompt:\n${CoverageAIConfig.DEBUG_SIMPLE_PROMPT_TEXT}"
-                    else
-                        prompt  // show full prompt
-                    RecommendationsDialog(project, shownPrompt, response).show()
+                        ?.logAiInteraction(promptToSend, response, modelId, amplifyBase, error)
+                    RecommendationsDialog(project, response).show()
                 }
             }
         }.queue()

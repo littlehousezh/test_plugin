@@ -11,7 +11,6 @@ import javax.swing.*
 
 class RecommendationsDialog(
     project: Project,
-    promptPreview: String,
     response: String
 ) : DialogWrapper(project, true) {
 
@@ -23,14 +22,6 @@ class RecommendationsDialog(
         border = JBUI.Borders.empty(8)
     }
 
-    private val promptArea = JTextArea().apply {
-        isEditable = false
-        lineWrap = true
-        wrapStyleWord = true
-        text = promptPreview
-        border = JBUI.Borders.empty(8)
-    }
-
     init {
         title = "Test Recommendations"
         init()
@@ -39,12 +30,7 @@ class RecommendationsDialog(
 
     override fun createCenterPanel(): JComponent {
         val panel = JPanel(BorderLayout())
-
-        val tabs = JTabbedPane().apply {
-            addTab("Recommendations", ScrollPaneFactory.createScrollPane(recommendationsArea))
-            addTab("Prompt (preview)", ScrollPaneFactory.createScrollPane(promptArea))
-        }
-        panel.add(tabs, BorderLayout.CENTER)
+        panel.add(ScrollPaneFactory.createScrollPane(recommendationsArea), BorderLayout.CENTER)
 
         val copyBtn = JButton("Copy recommendations").apply {
             addActionListener {

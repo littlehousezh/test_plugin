@@ -8,11 +8,23 @@ object CoverageAIConfig {
     const val MAX_METHOD_CHARS = 3500
     const val MAX_PROMPT_CHARS = 60000
 
-    const val AMPLIFY_BASE = "https://prod-api.vanderbilt.ai"
-    const val MODEL_ID = "gpt-5"
+    private const val DEFAULT_AMPLIFY_BASE = "https://prod-api.vanderbilt.ai"
+    private const val DEFAULT_MODEL_ID = "gpt-5"
 
     const val DEBUG_SIMPLE_PROMPT = false
     const val DEBUG_SIMPLE_PROMPT_TEXT = "What is the capital of France?"
+
+    fun getAmplifyBase(): String {
+        System.getenv("AMPLIFY_BASE")?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+        loadPluginEnv().getProperty("AMPLIFY_BASE")?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+        return DEFAULT_AMPLIFY_BASE
+    }
+
+    fun getModelId(): String {
+        System.getenv("AMPLIFY_MODEL_ID")?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+        loadPluginEnv().getProperty("AMPLIFY_MODEL_ID")?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+        return DEFAULT_MODEL_ID
+    }
 
     fun getAmplifyBearer(): String {
         // 1) Prefer user-provided token from IDE Settings UI
@@ -28,20 +40,23 @@ object CoverageAIConfig {
         System.getenv("AMPLIFY_BEARER")?.let { return AmplifyToken.normalize(it) }
 
         // 3) otherwise read from local .env file (ignored by git)
-        val envFile = File("plugin.env")
-        if (envFile.exists()) {
-            val props = Properties()
-            envFile.forEachLine { line ->
-                val trimmed = line.trim()
-                if (trimmed.isNotEmpty() && !trimmed.startsWith("#")) {
-                    val (k, v) = trimmed.split("=", limit = 2)
-                    props[k.trim()] = v.trim()
-                }
-            }
-            props.getProperty("AMPLIFY_BEARER")?.let { return AmplifyToken.normalize(it) }
-        }
+        loadPluginEnv().getProperty("AMPLIFY_BEARER")?.let { return AmplifyToken.normalize(it) }
 
         // 4) fallback for safety
         return "MISSING_TOKEN"
+    }
+
+    private fun loadPluginEnv(): Properties {
+        val props = Properties()
+        val envFile = File("plugin.env")
+        if (!envFile.exists()) return props
+        envFile.forEachLine { line ->
+            val trimmed = line.trim()
+            if (trimmed.isNotEmpty() && !trimmed.startsWith("#") && trimmed.contains("=")) {
+                val (k, v) = trimmed.split("=", limit = 2)
+                props[k.trim()] = v.trim()
+            }
+        }
+        return props
     }
 }
