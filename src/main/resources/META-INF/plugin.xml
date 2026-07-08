@@ -11,7 +11,7 @@
     <actions>
         <action id="AnalyzeCoverageAction"
                 class="com.github.ronah123.vanderbilttestplugin.actions.AnalyzeCoverageAction"
-                text="TestCompass: Analyze Coverage"
+                text="TestCompass"
                 description="Rank methods that need tests using the current IDE coverage suite.">
             <!-- Puts it under Tools menu -->
             <add-to-group group-id="ToolsMenu" anchor="last"/>

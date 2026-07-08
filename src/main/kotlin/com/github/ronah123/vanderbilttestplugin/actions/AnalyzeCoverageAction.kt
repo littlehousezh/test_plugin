@@ -13,7 +13,7 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.search.GlobalSearchScope
 
-class AnalyzeCoverageAction : AnAction("TestCompass: Analyze Coverage") {
+class AnalyzeCoverageAction : AnAction("TestCompass") {
 
     companion object {
         // Set to a positive number to cap the list, or null to show all rows.

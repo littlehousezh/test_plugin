@@ -12,7 +12,6 @@ import com.intellij.openapi.components.Storage
 @Service(Service.Level.APP)
 class CoverageSettings : PersistentStateComponent<CoverageSettings.State> {
     data class State(
-        var studentId: String = "",
         var amplifyBearer: String = ""
     )
 
@@ -30,11 +29,5 @@ class CoverageSettings : PersistentStateComponent<CoverageSettings.State> {
         state.amplifyBearer = AmplifyToken.normalize(token)
     }
 
-    fun getStudentId(): String = state.studentId.trim()
-
-    fun setStudentId(studentId: String) {
-        state.studentId = studentId.trim()
-    }
-
-    fun isConfigured(): Boolean = getStudentId().isNotBlank() && getBearerToken().isNotBlank()
+    fun isConfigured(): Boolean = getBearerToken().isNotBlank()
 }

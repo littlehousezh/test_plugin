@@ -1,6 +1,6 @@
 # TestCompass
 
-[TestCompass](https://plugins.jetbrains.com/plugin/30034-testcompass) is an IntelliJ IDEA plugin that helps students understand where their tests are weak. It reads IntelliJ's active coverage data, ranks under-tested production methods, and can generate conceptual test recommendations.
+TestCompass is an IntelliJ IDEA plugin that helps students understand where their tests are weak. It reads IntelliJ's active coverage data, ranks under-tested production methods, and can generate conceptual test recommendations through Vanderbilt Amplify.
 
 <!-- Plugin description -->
 Provides an IntelliJ Platform plugin that identifies coverage hotspots from the IDE's coverage data, shows them in a dedicated tool window, and generates AI-powered test recommendations for the most under-covered methods. Intended for educational use, it highlights weakly tested code and offers guidance without generating test code directly.
@@ -10,7 +10,7 @@ Provides an IntelliJ Platform plugin that identifies coverage hotspots from the 
 
 1. Open IntelliJ IDEA.
 2. Go to `Settings > Plugins > Marketplace`.
-3. Search for `vandytest` or `TestCompass`.
+3. Search for `TestCompass`.
 4. Install the plugin from the JetBrains Marketplace listing:
    `https://plugins.jetbrains.com/plugin/30034-vandytest`
 5. Restart IntelliJ IDEA if prompted.
@@ -19,7 +19,6 @@ Provides an IntelliJ Platform plugin that identifies coverage hotspots from the 
 
 When IntelliJ opens a project after installation, TestCompass shows a setup dialog. Enter:
 
-- `Student ID`: your student identifier.
 - `Amplify token`: the token provided by the instructor.
 
 You can update these later in `Settings > Tools > TestCompass` or by searching `TestCompass` in IntelliJ settings.
@@ -32,14 +31,22 @@ You can update these later in `Settings > Tools > TestCompass` or by searching `
    - Right-click the test class, test folder, or project.
    - Choose `Run 'All Tests' with Coverage` or `Run '<TestClass>' with Coverage`.
 4. Run TestCompass:
-   - Go to `Tools > TestCompass: Analyze Coverage`.
+   - Go to `Tools > TestCompass`.
 5. Open the `TestCompass` tool window on the right side of IntelliJ.
 6. Review the ranked methods with the most missed coverage.
 7. Click `Generate recommendations` to receive guidance for improving tests.
 8. Use the recommendations to decide what behaviors, edge cases, and assertions to add.
-9. Re-run tests with coverage and run TestCompass again to check the improvement.
+9. Re-run tests with coverage and run TestCompass again to check improvement.
 
-TestCompass requires an active IntelliJ coverage suite. If it says `No active coverage suite`, run tests with coverage first and then run `Tools > TestCompass: Analyze Coverage` again.
+TestCompass requires an active IntelliJ coverage suite. If it says `No active coverage suite`, run tests with coverage first and then run `Tools > TestCompass` again.
+
+## Notes For Instructors
+
+- The plugin gives conceptual testing advice; it is designed not to write complete test code for students.
+- AI interactions are logged under the opened project in `.testcompass/logs/`.
+- Students can rename the submitted log file with their student ID if required by the course.
+- The plugin ID is currently `com.github.ronah123.vanderbilttestplugin` so uploaded versions continue to match the existing Marketplace listing.
+- The visible plugin name is `TestCompass`.
 
 ## Build For Marketplace
 
@@ -54,3 +61,5 @@ The uploadable Marketplace ZIP is generated in:
 ```text
 build/distributions/
 ```
+
+Do not upload a manually compressed source folder. Upload the generated plugin ZIP.

@@ -27,15 +27,13 @@ class AIInteractionLoggerService(private val project: Project) {
 
     fun logAiInteraction(prompt: String, response: String, modelId: String, baseUrl: String, error: Throwable?) {
         val basePath = project.basePath ?: return
-        val id = getApplication().getService(CoverageSettings::class.java).getStudentId().ifBlank { "unknown" }
-        val dir = Paths.get(basePath, ".testcompass", "logs", sanitizeId(id))
+        val dir = Paths.get(basePath, ".testcompass", "logs")
         Files.createDirectories(dir)
 
         val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))
         val logFile = uniqueFile(dir, "$timestamp.log")
 
         val sb = StringBuilder()
-        sb.append("studentId=").append(id).append('\n')
         sb.append("timestamp=").append(timestamp).append('\n')
         sb.append("model=").append(modelId).append('\n')
         sb.append("baseUrl=").append(baseUrl).append('\n')
@@ -49,19 +47,6 @@ class AIInteractionLoggerService(private val project: Project) {
         sb.append(response).append('\n')
 
         Files.write(logFile, sb.toString().toByteArray(StandardCharsets.UTF_8))
-    }
-
-    private fun sanitizeId(id: String): String {
-        val trimmed = id.trim()
-        if (trimmed.isEmpty()) return "unknown"
-        val safe = trimmed.map { ch ->
-            when {
-                ch.isLetterOrDigit() -> ch
-                ch == '-' || ch == '_' -> ch
-                else -> '_'
-            }
-        }.joinToString("")
-        return if (safe.isBlank()) "unknown" else safe
     }
 
     private fun uniqueFile(dir: Path, fileName: String): Path {

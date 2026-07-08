@@ -96,7 +96,7 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
             if (!TestCompassSetupDialog(project, settings).showAndGet() || !settings.isConfigured()) {
                 Messages.showInfoMessage(
                     project,
-                    "Enter your student ID and Amplify token to generate recommendations.",
+                    "Enter your Amplify token to generate recommendations.",
                     "TestCompass Setup"
                 )
                 return
