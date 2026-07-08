@@ -1,6 +1,8 @@
 # TestCompass
 
-![Workflow demo](sample-app/workflow_1200x760.gif)
+<p align="center">
+  <img src="sample-app/workflow_1200x760.gif" alt="Workflow demo" width="350">
+</p>
 
 TestCompass is an IntelliJ IDEA plugin that helps students understand where their tests are weak. It reads IntelliJ's active coverage data, ranks under-tested production methods, and can generate conceptual test recommendations.
 
