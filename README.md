@@ -4,7 +4,7 @@
   <img src="sample-app/workflow_1200x760.gif" alt="Workflow demo" width="350">
 </p>
 
-(TestCompass)[https://plugins.jetbrains.com/plugin/30034-vandytest] is an IntelliJ IDEA plugin that helps students understand where their tests are weak. It reads IntelliJ's active coverage data, ranks under-tested production methods, and can generate conceptual test recommendations.
+[TestCompass](https://plugins.jetbrains.com/plugin/30034-vandytest) is an IntelliJ IDEA plugin that helps students understand where their tests are weak. It reads IntelliJ's active coverage data, ranks under-tested production methods, and can generate conceptual test recommendations.
 
 <!-- Plugin description -->
 Provides an IntelliJ Platform plugin that identifies coverage hotspots from the IDE's coverage data, shows them in a dedicated tool window, and generates AI-powered test recommendations for the most under-covered methods. Intended for educational use, it highlights weakly tested code and offers guidance without generating test code directly.
