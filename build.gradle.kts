@@ -34,7 +34,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.opentest4j)
 
-    implementation("org.json:json:20231013")
+    implementation("org.json:json:20251224")
 
     // For unescaping \\uXXXX etc.
     implementation("org.apache.commons:commons-text:1.11.0")
