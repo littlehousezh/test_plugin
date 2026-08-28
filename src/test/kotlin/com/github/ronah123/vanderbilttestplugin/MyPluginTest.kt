@@ -7,6 +7,7 @@ import com.intellij.testFramework.TestDataPath
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.util.PsiErrorElementUtil
 import com.github.ronah123.vanderbilttestplugin.services.MyProjectService
+import com.github.ronah123.vanderbilttestplugin.coverage.AmplifyChatClient
 
 @TestDataPath("\$CONTENT_ROOT/src/test/testData")
 class MyPluginTest : BasePlatformTestCase() {
@@ -33,6 +34,32 @@ class MyPluginTest : BasePlatformTestCase() {
         val projectService = project.service<MyProjectService>()
 
         assertNotSame(projectService.getRandomNumber(), projectService.getRandomNumber())
+    }
+
+    fun testAmplifyUsesPreferredModelOnlyWhenAvailable() {
+        val response = """
+            {"data":{"models":[{"id":"gpt-5.2"},{"id":"account-default"}],"default":{"id":"account-default"}}}
+        """.trimIndent()
+
+        assertEquals("gpt-5.2", AmplifyChatClient.selectAvailableModel(response, "gpt-5.2"))
+        assertEquals("account-default", AmplifyChatClient.selectAvailableModel(response, "gpt-5"))
+    }
+
+    fun testAmplifyFallsBackToFirstAvailableModelWithoutDefault() {
+        val response = """
+            {"data":{"models":[{"id":"first-model"},{"id":"second-model"}]}}
+        """.trimIndent()
+
+        assertEquals("first-model", AmplifyChatClient.selectAvailableModel(response, ""))
+    }
+
+    fun testAmplifyExtractsCurrentChatResponse() {
+        assertEquals(
+            "Recommendation text",
+            AmplifyChatClient.extractContentSmart(
+                """{"success":true,"message":"ok","data":"Recommendation text"}"""
+            )
+        )
     }
 
     override fun getTestDataPath() = "src/test/testData/rename"

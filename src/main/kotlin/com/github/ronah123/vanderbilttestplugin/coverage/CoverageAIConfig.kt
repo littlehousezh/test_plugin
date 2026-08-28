@@ -11,7 +11,6 @@ object CoverageAIConfig {
     const val MAX_PROMPT_CHARS = 60000
 
     private const val DEFAULT_AMPLIFY_BASE = "https://prod-api.vanderbilt.ai"
-    private const val DEFAULT_MODEL_ID = "gpt-5"
 
     const val DEBUG_SIMPLE_PROMPT = false
     const val DEBUG_SIMPLE_PROMPT_TEXT = "What is the capital of France?"
@@ -25,7 +24,9 @@ object CoverageAIConfig {
     fun getModelId(): String {
         System.getenv("AMPLIFY_MODEL_ID")?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
         loadPluginEnv().getProperty("AMPLIFY_MODEL_ID")?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
-        return DEFAULT_MODEL_ID
+        // An empty preference tells the client to use the account's current
+        // default from /available_models instead of hard-coding a stale ID.
+        return ""
     }
 
     fun getAmplifyBearer(): String {

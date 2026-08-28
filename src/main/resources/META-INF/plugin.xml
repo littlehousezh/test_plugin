@@ -26,13 +26,11 @@
                 displayName="TestCompass"
                 instance="com.github.ronah123.vanderbilttestplugin.coverage.CoverageSettingsConfigurable"/>
 
-        <postStartupActivity implementation="com.github.ronah123.vanderbilttestplugin.startup.MyProjectActivity" />
-
         <toolWindow
                 id="TestCompass"
                 anchor="right"
                 factoryClass="com.github.ronah123.vanderbilttestplugin.coverage.CoverageHotspotsToolWindowFactory"
-                canCloseContents="true"/>
+                canCloseContents="false"/>
     </extensions>
 
 

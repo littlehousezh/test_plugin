@@ -2,7 +2,9 @@ package com.github.ronah123.vanderbilttestplugin.coverage
 
 import com.intellij.util.concurrency.AppExecutorUtil
 import org.apache.commons.text.StringEscapeUtils
+import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpHeaders
@@ -15,9 +17,13 @@ import java.time.Duration
 class AmplifyChatClient(
     private val baseUrl: String,
     private val bearerToken: String,
-    private val modelId: String,
+    private val preferredModelId: String,
     private val debug: Boolean = true
 ) : ChatClient {
+
+    @Volatile
+    var resolvedModelId: String? = null
+        private set
 
     private val client: HttpClient = HttpClient.newBuilder()
         .executor(AppExecutorUtil.getAppExecutorService())
@@ -25,7 +31,12 @@ class AmplifyChatClient(
         .build()
 
     override fun chatOnce(prompt: String): String {
-        val payload = payloadWrappedExact(prompt)
+        val modelId = try {
+            resolveModelId()
+        } catch (e: AmplifyRequestException) {
+            return e.message ?: "Unable to select an Amplify model."
+        }
+        val payload = payloadWrappedExact(prompt, modelId)
 
         val req = HttpRequest.newBuilder()
             .uri(URI.create("${baseUrl.trimEnd('/')}/chat"))
@@ -54,8 +65,46 @@ class AmplifyChatClient(
         return errorDump("Chat API request failed", res, payload)
     }
 
-    // Matches your server doc: top-level { "data": { ... } } and model/prompt inside options.
-    private fun payloadWrappedExact(prompt: String): String {
+    /**
+     * Amplify model access is account-specific. Resolve the configured preference
+     * against /available_models and otherwise use the server-provided default.
+     */
+    private fun resolveModelId(): String {
+        resolvedModelId?.let { return it }
+
+        val req = HttpRequest.newBuilder()
+            .uri(URI.create("${baseUrl.trimEnd('/')}/available_models"))
+            .header("Authorization", "Bearer $bearerToken")
+            .header("Accept", "application/json")
+            .GET()
+            .build()
+        val res = execute(req)
+
+        if (res.status == 401) {
+            throw AmplifyRequestException(
+                "Amplify authentication failed (HTTP 401). Check that the saved token is current."
+            )
+        }
+        if (res.status !in 200..299) {
+            throw AmplifyRequestException(
+                "Could not retrieve models available to this Amplify token (HTTP ${res.status})."
+            )
+        }
+
+        val selected = runCatching {
+            selectAvailableModel(res.body, preferredModelId)
+        }.getOrElse { cause ->
+            throw AmplifyRequestException("Amplify returned an invalid available-models response.", cause)
+        } ?: throw AmplifyRequestException(
+            "Amplify did not return any models available to this token. Ask the token administrator to grant chat model access."
+        )
+
+        resolvedModelId = selected
+        return selected
+    }
+
+    // Matches Amplify's API: top-level { "data": { ... } } and model/prompt inside options.
+    private fun payloadWrappedExact(prompt: String, modelId: String): String {
         return """
             {
               "data": {
@@ -94,7 +143,7 @@ class AmplifyChatClient(
                 '\u2028' -> sb.append("\\u2028")
                 '\u2029' -> sb.append("\\u2029")
                 else -> {
-                    val code = ch.toInt()
+                    val code = ch.code
                     if (code < 0x20) {
                         sb.append("\\u")
                         sb.append("0123456789abcdef"[(code shr 12) and 0xF])
@@ -124,37 +173,6 @@ class AmplifyChatClient(
         return HttpResult(resp.statusCode(), resp.headers(), bodyUtf8)
     }
 
-    /**
-     * Robustly extract assistant text from various response shapes, then
-     * unescape once (if double-escaped) and normalize to NFC.
-     *
-     * Supported shapes:
-     * 1) {"choices":[{"message":{"content":"…"}}]}
-     * 2) {"data":{"content":"…"}}
-     * 3) {"data":"…"}
-     * 4) {"content":"…"}
-     */
-    private fun extractContentSmart(body: String): String? {
-        val trimmed = body.trim()
-        if (trimmed.isEmpty() || (trimmed.first() != '{' && trimmed.first() != '[')) return null
-
-        val root = JSONObject(body)
-
-        runCatching {
-            val content = root.getString("data")
-            return sanitizeModelText(content)
-        }
-
-        return null
-    }
-
-    /** Unescape once if needed (handles \\uXXXX) and normalize to NFC. */
-    private fun sanitizeModelText(s: String): String {
-        val needsUnescape = s.contains("\\u") || s.contains("\\n") || s.contains("\\t") || s.contains("\\r")
-        val unescapedOnce = if (needsUnescape) StringEscapeUtils.unescapeJava(s) else s
-        return Normalizer.normalize(unescapedOnce, Normalizer.Form.NFC)
-    }
-
     private fun errorDump(title: String, res: HttpResult, requestBody: String): String {
         val sb = StringBuilder()
         sb.append(title).append('\n')
@@ -172,5 +190,65 @@ class AmplifyChatClient(
             sb.append("\n--- Request payload preview ---\n").append(reqPreview).append('\n')
         }
         return sb.toString()
+    }
+
+    private class AmplifyRequestException(message: String, cause: Throwable? = null) : IOException(message, cause)
+
+    companion object {
+        /** Select only IDs that Amplify says are available to this token. */
+        internal fun selectAvailableModel(body: String, preferredModelId: String): String? {
+            val data = JSONObject(body).optJSONObject("data") ?: return null
+            val models = data.optJSONArray("models") ?: JSONArray()
+            val availableIds = buildList {
+                for (index in 0 until models.length()) {
+                    models.optJSONObject(index)?.optString("id")
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let(::add)
+                }
+            }
+
+            preferredModelId.trim().takeIf { it in availableIds }?.let { return it }
+
+            val defaultId = data.optJSONObject("default")?.optString("id")
+                ?.takeIf { it.isNotBlank() }
+            if (defaultId != null && defaultId in availableIds) return defaultId
+
+            return availableIds.firstOrNull()
+        }
+
+        /**
+         * Extract text from the current Amplify response and common OpenAI-like
+         * response shapes used by compatible deployments.
+         */
+        internal fun extractContentSmart(body: String): String? {
+            val trimmed = body.trim()
+            if (trimmed.isEmpty() || trimmed.first() != '{') return null
+
+            val root = JSONObject(trimmed)
+            extractText(root.opt("data"))?.let { return sanitizeModelText(it) }
+            extractText(root)?.let { return sanitizeModelText(it) }
+            return null
+        }
+
+        private fun extractText(value: Any?): String? {
+            when (value) {
+                is String -> return value
+                is JSONObject -> {
+                    value.optString("content").takeIf { it.isNotBlank() }?.let { return it }
+                    val choices = value.optJSONArray("choices")
+                    val messageContent = choices?.optJSONObject(0)
+                        ?.optJSONObject("message")
+                        ?.optString("content")
+                    if (!messageContent.isNullOrBlank()) return messageContent
+                }
+            }
+            return null
+        }
+
+        private fun sanitizeModelText(s: String): String {
+            val needsUnescape = s.contains("\\u") || s.contains("\\n") || s.contains("\\t") || s.contains("\\r")
+            val unescapedOnce = if (needsUnescape) StringEscapeUtils.unescapeJava(s) else s
+            return Normalizer.normalize(unescapedOnce, Normalizer.Form.NFC)
+        }
     }
 }

@@ -243,6 +243,13 @@ Coverage-specific rules:
 - Do not write test code. Provide names and behavior/assertion outlines only.
 - Keep the advice concise and actionable.
 
+Response format:
+- Return plain text only. Do not use LaTeX, Markdown, HTML, tables, or code fences.
+- Start with the heading "Recommended tests".
+- Use a numbered list. For each recommendation, include a short test name followed by indented "Covers", "Action", and "Expected" lines.
+- Use ordinary words for operators and conditions instead of mathematical notation.
+- End with a short "Already covered" section only when it helps prevent duplicate tests.
+
 If a test file isn't found, say that no existing tests were found and base recommendations only on coverage/source.
 
 Additionally, if any tests are commented out and target a core functionality that should be tested, treat the functionality as untested and note that it was attempted but is currently commented out.

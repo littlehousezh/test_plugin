@@ -146,7 +146,7 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
                 val amplifyBase = CoverageAIConfig.getAmplifyBase()
                 val modelId = CoverageAIConfig.getModelId()
 
-                val client: ChatClient = AmplifyChatClient(
+                val client = AmplifyChatClient(
                     amplifyBase,
                     CoverageAIConfig.getAmplifyBearer(),
                     modelId
@@ -168,7 +168,13 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
 
                 ApplicationManager.getApplication().invokeLater {
                     project.getService(AIInteractionLoggerService::class.java)
-                        ?.logAiInteraction(promptToSend, response, modelId, amplifyBase, error)
+                        ?.logAiInteraction(
+                            promptToSend,
+                            response,
+                            client.resolvedModelId ?: modelId.ifBlank { "Amplify account default" },
+                            amplifyBase,
+                            error
+                        )
                     RecommendationsDialog(project, response).show()
                 }
             }

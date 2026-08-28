@@ -16,10 +16,8 @@ class CoverageHotspotsService(private val project: Project) {
             val tw = ToolWindowManager.getInstance(project)
                 .getToolWindow(CoverageHotspotsToolWindowFactory.ID) ?: return@invokeLater
 
-            // Showing the tool window triggers factory.createToolWindowContent (if not created yet),
-            // which sets `panel` on this service. Then we can push data.
             tw.show {
-                panel?.setData(rows)
+                CoverageHotspotsToolWindowFactory.ensureContent(project, tw).setData(rows)
             }
         }
     }
