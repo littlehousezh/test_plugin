@@ -19,7 +19,7 @@ Provides an IntelliJ Platform plugin that identifies coverage hotspots from the 
    `https://plugins.jetbrains.com/plugin/30034-vandytest`
 5. Restart IntelliJ IDEA if prompted.
 
-### Install From Disk
+## Install From Disk (If you cannot find the plugin from the Marketplace)
 
 If TestCompass does not appear in the JetBrains Marketplace:
 
