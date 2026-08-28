@@ -23,7 +23,7 @@ Provides an IntelliJ Platform plugin that identifies coverage hotspots from the 
 
 If TestCompass does not appear in the JetBrains Marketplace:
 
-1. Download the latest TestCompass plugin ZIP file: [`TestCompass-0.0.5.zip`](./test_plugin/TestCompass-0.0.5.zip). Do not extract it.
+1. Download the latest TestCompass plugin ZIP file: [`TestCompass-0.0.5.zip`](./TestCompass-0.0.5.zip). Do not extract it.
 2. Open IntelliJ IDEA.
 3. Go to `Settings > Plugins`.
 4. Click the gear icon and select `Install Plugin from Disk...`.
