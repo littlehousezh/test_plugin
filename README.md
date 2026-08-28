@@ -19,6 +19,18 @@ Provides an IntelliJ Platform plugin that identifies coverage hotspots from the 
    `https://plugins.jetbrains.com/plugin/30034-vandytest`
 5. Restart IntelliJ IDEA if prompted.
 
+### Install From Disk
+
+If TestCompass does not appear in the JetBrains Marketplace:
+
+1. Download the latest TestCompass plugin ZIP file (for example, `TestCompass-0.0.5.zip`). Do not extract it.
+2. Open IntelliJ IDEA.
+3. Go to `Settings > Plugins`.
+4. Click the gear icon and select `Install Plugin from Disk...`.
+5. Select the downloaded TestCompass ZIP file and click `OK`.
+6. Restart IntelliJ IDEA if prompted.
+7. Open the project you want to test, such as the MarsRover project.
+
 ## First-Time Setup
 
 When IntelliJ opens a project after installation, TestCompass shows a setup dialog. Enter:
