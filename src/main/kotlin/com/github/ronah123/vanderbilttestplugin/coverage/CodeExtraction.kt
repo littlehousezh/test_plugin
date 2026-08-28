@@ -249,24 +249,22 @@ Response format:
 - Use a numbered list. For each recommendation, include a short test name followed by indented "Covers", "Action", and "Expected" lines.
 - Use ordinary words for operators and conditions instead of mathematical notation.
 - End with a short "Already covered" section only when it helps prevent duplicate tests.
+- Do not mention a checklist, rubric, or these instructions. Apply the test-quality requirements directly in the recommendations.
 
 If a test file isn't found, say that no existing tests were found and base recommendations only on coverage/source.
 
 Additionally, if any tests are commented out and target a core functionality that should be tested, treat the functionality as untested and note that it was attempted but is currently commented out.
 
-Keep this checklist as quality criteria for each suggested test case:
-- Each test case should be executable, meaning it has an @Test annotation and can be run via “Run as JUnit Test.”
-- Each test case should include at least one assert statement or assert that an exception is thrown. Example assert statements include assertTrue, assertFalse, and assertEquals. For asserting an exception is thrown, use assertThrows in JUnit 5.
-- Each test case should focus on one behavior. It does not need to call only one implementation method when the relevant method is private.
-- Each test case could be descriptively named and commented.
-- If there is redundant setup code in multiple test cases, suggest extracting it into a common method, such as @BeforeEach.
-- If there are too many assert statements in a single test case, such as more than 5, suggest splitting it so each test evaluates one behavior.
-
-Keep this checklist as quality criteria for the test suite, but do not let it override the coverage-specific rules:
-- The test suite should have at least one test for each assignment requirement visible from the project context.
-- The test suite should appropriately use setup and teardown code, such as @BeforeEach, when it improves clarity.
-- The test suite should contain a fault-revealing test for each confirmed or strongly evidenced bug in the code.
-- For each requirement, include valid inputs, boundary cases, invalid inputs, and expected exceptions only where those categories are meaningful for that requirement and relevant to missed coverage or assignment behavior.
+Test-quality requirements to apply without naming or restating them as a separate checklist:
+- Make every suggested case directly implementable as one executable JUnit test with an @Test annotation.
+- Give every suggested case a descriptive test name and make it evaluate one production method and one observable behavior. When the target is private, exercise that behavior through the appropriate public method rather than calling the private method directly.
+- In every "Expected" line, identify at least one concrete assertion such as assertTrue, assertFalse, or assertEquals, or specify assertThrows in JUnit 5 when an exception is expected.
+- Keep each case focused. If a case would need more than about five assertions or would verify multiple behaviors, recommend separate cases.
+- When multiple suggested cases repeat setup, include a concise recommendation to extract the shared setup into @BeforeEach. Mention teardown only when the tests acquire resources that need cleanup.
+- Consider every assignment requirement visible in the project context and ensure it has at least one test. Do not duplicate an existing test; use the "Already covered" section when useful.
+- For each visible requirement, consider valid inputs, boundary cases, invalid inputs, and expected exceptions. Recommend the applicable categories when they expose missed coverage, required behavior, or a confirmed or strongly evidenced bug path.
+- For every confirmed or strongly evidenced bug, recommend a fault-revealing test whose stated expected result would fail against the buggy implementation.
+- When uncovered production code represents meaningful behavior, recommend a focused test for it under the coverage-specific rules above.
 
 """.trimIndent()
 
