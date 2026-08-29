@@ -33,28 +33,55 @@ If TestCompass does not appear in the JetBrains Marketplace:
 
 ## First-Time Setup
 
-Open `Settings > Tools > TestCompass` and enter:
+Open IntelliJ IDEA `Settings` (`Preferences` on macOS), search for `TestCompass`, and enter:
 
 - `Amplify token`: the token provided by the instructor.
 
-You can also leave it blank initially. TestCompass will ask for the token when you first click `Generate recommendations`.
+Paste the raw token without quotation marks. A leading `Bearer` prefix is not required. You can also leave the field blank initially; TestCompass will ask for the token when you first click `Generate recommendations`.
 
-## Workflow
+## How to Use TestCompass
 
 1. Open the assignment project in IntelliJ IDEA.
 2. Open or create the JUnit test file for the assignment.
-3. Run tests with coverage:
+3. Run the relevant tests with IntelliJ coverage:
    - Right-click the test class, test folder, or project.
-   - Choose `Run 'All Tests' with Coverage` or `Run '<TestClass>' with Coverage`.
-4. Run TestCompass:
-   - Go to `Tools > TestCompass`.
-5. Open the `TestCompass` tool window on the right side of IntelliJ.
-6. Review the ranked methods with the most missed coverage.
-7. Click `Generate recommendations` to receive guidance for improving tests.
-8. Use the recommendations to decide what behaviors, edge cases, and assertions to add.
-9. Re-run tests with coverage and run TestCompass again to check for improvement.
+   - Select `Run '<name>' with Coverage`. The exact name depends on what you selected.
+   - Wait for the tests and coverage calculation to finish.
+4. Start TestCompass using either option:
+   - Click the `TestCompass` tool-window icon on the right side of IntelliJ. On first activation, the coverage analysis starts automatically.
+   - Select `Tools > TestCompass` from the main menu. You can also use this option later to refresh the analysis.
+5. In the TestCompass tool window, review the ranked production methods. Methods with more missed lines appear first.
+6. Click `Generate recommendations`.
+   - If no Amplify token is saved, enter the instructor-provided token in the setup dialog and click `OK`.
+   - TestCompass sends the relevant production source, existing tests, and missed coverage information to Amplify.
+7. Review the conceptual test recommendations. They describe the behavior, action, and expected assertion but do not generate test code automatically.
+8. Add or improve the JUnit tests in your project.
+9. Run the tests with coverage again, then open the right-side TestCompass tool window or select `Tools > TestCompass` to refresh the results.
 
-TestCompass requires an active IntelliJ coverage suite. If it says `No active coverage suite`, run tests with coverage first and then run `Tools > TestCompass` again.
+## Important Usage Notes
+
+- Run tests **with coverage before starting TestCompass**. A normal test run does not create the coverage data that TestCompass needs.
+- TestCompass analyzes the currently active IntelliJ coverage suite. Run all relevant tests together with coverage when you want recommendations based on the complete test suite.
+- The right-side icon and `Tools > TestCompass` run the same analysis. You do not need to use the Tools menu before using the icon.
+- Recommendations are based on missed production lines and branches. Fully covered behavior may appear under `Already covered` instead of being recommended again.
+
+## Troubleshooting
+
+### No active coverage suite
+
+Run the relevant tests using `Run '<name>' with Coverage`, wait for coverage to finish, and then start TestCompass again.
+
+### The TestCompass table is empty
+
+Confirm that the active coverage run includes production classes from the current project, not only library or test classes. Then select `Tools > TestCompass` to refresh the analysis.
+
+### Recommendations cannot authenticate
+
+Open IntelliJ IDEA `Settings`/`Preferences`, search for `TestCompass`, and replace the saved Amplify token with a current token from the instructor. Paste only the raw token.
+
+### The right-side icon does not start analysis
+
+Confirm that plugin version `0.0.6` or newer is installed under `Settings > Plugins`. Older ZIP installations do not include automatic analysis on first tool-window activation. If needed, uninstall the older version, install the latest ZIP from this README, and restart IntelliJ IDEA.
 
 
 ## Build For Marketplace
