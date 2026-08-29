@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [0.0.6]
+### Changed
+- Run TestCompass coverage analysis when the right-side tool window is opened for the first time.
+- Apply test-quality requirements in recommendations without referring to a checklist or rubric.
+
 ## [0.0.5]
 ### Added
 - Include missed source line numbers and snippets in AI recommendation prompts.
