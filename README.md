@@ -41,8 +41,8 @@ Paste the raw token without quotation marks. A leading `Bearer` prefix is not re
 
 ## How to Use TestCompass
 
-1. Open the assignment project in IntelliJ IDEA.
-2. Open or create the JUnit test file for the assignment.
+1. Open the project in IntelliJ IDEA.
+2. Open or create the JUnit test file for the project.
 3. Run the relevant tests with IntelliJ coverage:
    - Right-click the test class, test folder, or project.
    - Select `Run '<name>' with Coverage`. The exact name depends on what you selected.
