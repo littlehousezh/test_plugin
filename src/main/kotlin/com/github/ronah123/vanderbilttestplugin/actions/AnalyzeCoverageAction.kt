@@ -1,6 +1,7 @@
 package com.github.ronah123.vanderbilttestplugin.actions
 
 import com.intellij.coverage.CoverageDataManager
+import com.intellij.coverage.CoverageSuitesBundle
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
@@ -27,24 +28,20 @@ class AnalyzeCoverageAction : AnAction("TestCompass") {
     }
 
     /**
-     * Run the same coverage analysis from either the Tools action or the
-     * TestCompass tool-window icon.
-     *
-     * Tool-window content can also be created as a consequence of the Tools
-     * action showing its results. In that case [initialActivationOnly] keeps
-     * the factory from starting a duplicate background analysis.
+     * Run coverage analysis manually or for a bundle that IntelliJ has just
+     * finished calculating.
      */
-    fun analyze(project: Project, initialActivationOnly: Boolean = false) {
+    fun analyze(project: Project, calculatedBundle: CoverageSuitesBundle? = null) {
         val hotspotsService = project.getService(
             com.github.ronah123.vanderbilttestplugin.coverage.CoverageHotspotsService::class.java
         )
-        if (!hotspotsService.beginAnalysis(initialActivationOnly)) return
 
         object : Task.Backgroundable(project, "Analyzing IDE Coverage", true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.text = "Reading current coverage suite…"
 
-                val bundle = CoverageDataManager.getInstance(project).currentSuitesBundle
+                val bundle = calculatedBundle
+                    ?: CoverageDataManager.getInstance(project).currentSuitesBundle
                 if (bundle == null) {
                     info(
                         project,

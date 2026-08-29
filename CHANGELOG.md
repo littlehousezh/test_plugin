@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [0.0.7]
+### Changed
+- Automatically run TestCompass and update its tool window whenever IntelliJ finishes calculating new coverage results.
+- Keep `Tools > TestCompass` available as a manual analysis and refresh option.
+
 ## [0.0.6]
 ### Changed
 - Run TestCompass coverage analysis when the right-side tool window is opened for the first time.

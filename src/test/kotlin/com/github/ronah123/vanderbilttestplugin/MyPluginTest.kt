@@ -8,7 +8,12 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.util.PsiErrorElementUtil
 import com.github.ronah123.vanderbilttestplugin.services.MyProjectService
 import com.github.ronah123.vanderbilttestplugin.coverage.AmplifyChatClient
-import com.github.ronah123.vanderbilttestplugin.coverage.CoverageHotspotsService
+import com.github.ronah123.vanderbilttestplugin.startup.CoverageCalculatedListener
+import com.github.ronah123.vanderbilttestplugin.startup.CoverageRunTracker
+import com.intellij.coverage.CoverageSuite
+import com.intellij.coverage.CoverageSuitesBundle
+import java.lang.reflect.Proxy
+import java.util.concurrent.atomic.AtomicLong
 
 @TestDataPath("\$CONTENT_ROOT/src/test/testData")
 class MyPluginTest : BasePlatformTestCase() {
@@ -63,12 +68,56 @@ class MyPluginTest : BasePlatformTestCase() {
         )
     }
 
-    fun testToolWindowAnalysisRunsOnlyWhenNoOtherEntryPointHasStartedIt() {
-        val service = project.service<CoverageHotspotsService>()
+    fun testCoverageRunTrackerAcceptsEachNewCoverageResultOnce() {
+        val tracker = CoverageRunTracker()
+        val firstBundle = Any()
+        val secondBundle = Any()
 
-        assertTrue(service.beginAnalysis(initialActivationOnly = true))
-        assertFalse(service.beginAnalysis(initialActivationOnly = true))
-        assertTrue(service.beginAnalysis(initialActivationOnly = false))
+        assertTrue(tracker.claim(firstBundle, 100L))
+        assertFalse(tracker.claim(firstBundle, 100L))
+        assertTrue(tracker.claim(firstBundle, 101L))
+        assertTrue(tracker.claim(secondBundle, 101L))
+    }
+
+    fun testCalculatedCoverageAutomaticallyStartsOneAnalysisPerResult() {
+        val timestamp = AtomicLong(100L)
+        val bundle = coverageBundle(timestamp)
+        var analysisCount = 0
+        var analyzedBundle: CoverageSuitesBundle? = null
+        val listener = CoverageCalculatedListener(project) { _, calculatedBundle ->
+            analysisCount++
+            analyzedBundle = calculatedBundle
+        }
+
+        listener.coverageDataCalculated(bundle)
+        listener.coverageDataCalculated(bundle)
+        assertEquals(1, analysisCount)
+        assertSame(bundle, analyzedBundle)
+
+        timestamp.incrementAndGet()
+        listener.coverageDataCalculated(bundle)
+        assertEquals(2, analysisCount)
+    }
+
+    private fun coverageBundle(timestamp: AtomicLong): CoverageSuitesBundle {
+        val suite = Proxy.newProxyInstance(
+            CoverageSuite::class.java.classLoader,
+            arrayOf(CoverageSuite::class.java)
+        ) { proxy, method, args ->
+            when (method.name) {
+                "getLastCoverageTimeStamp" -> timestamp.get()
+                "getCoverageEngine", "getProject", "getRunner", "getCoverageDataFileProvider", "getCoverageData" -> null
+                "getCoverageDataFileName", "getPresentableName" -> "test-coverage"
+                "isValid" -> true
+                "isTrackTestFolders", "isBranchCoverage", "isCoverageByTestEnabled" -> false
+                "hashCode" -> System.identityHashCode(proxy)
+                "equals" -> proxy === args?.firstOrNull()
+                "toString" -> "TestCoverageSuite"
+                else -> null
+            }
+        } as CoverageSuite
+
+        return CoverageSuitesBundle(suite)
     }
 
     override fun getTestDataPath() = "src/test/testData/rename"

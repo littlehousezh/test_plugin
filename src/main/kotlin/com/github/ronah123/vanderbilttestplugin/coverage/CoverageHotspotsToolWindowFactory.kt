@@ -1,7 +1,5 @@
 package com.github.ronah123.vanderbilttestplugin.coverage
 
-import com.github.ronah123.vanderbilttestplugin.actions.AnalyzeCoverageAction
-import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
@@ -11,16 +9,6 @@ class CoverageHotspotsToolWindowFactory : ToolWindowFactory {
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         ensureContent(project, toolWindow)
-
-        // Tool-window factories are initialized lazily on first activation. Run
-        // the same workflow as Tools -> TestCompass after IntelliJ finishes
-        // making the window visible. The launch gate prevents a duplicate run
-        // when the Tools action itself caused the window to be initialized.
-        ApplicationManager.getApplication().invokeLater {
-            if (!project.isDisposed) {
-                AnalyzeCoverageAction().analyze(project, initialActivationOnly = true)
-            }
-        }
     }
 
     companion object {

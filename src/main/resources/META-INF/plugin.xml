@@ -21,6 +21,9 @@
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
+        <postStartupActivity
+                implementation="com.github.ronah123.vanderbilttestplugin.startup.CoverageAutoAnalysisActivity"/>
+
         <applicationConfigurable
                 id="testcompass.settings"
                 displayName="TestCompass"
