@@ -37,7 +37,7 @@ Open IntelliJ IDEA `Settings` (`Preferences` on macOS), search for `TestCompass`
 
 - `Amplify token`: the token provided by the instructor.
 
-Paste the raw token without quotation marks. A leading `Bearer` prefix is not required. You can also leave the field blank initially; TestCompass will ask for the token when you first click `Generate recommendations`.
+Paste the raw token. A leading `Bearer` prefix is not required. You can also leave the field blank initially; TestCompass will ask for the token when you first click `Generate recommendations`. If you prefer to set it up manually, go to `Settings` → `Other Settings` → `TestCompass`, then paste your token there.
 
 ## How to Use TestCompass
 
