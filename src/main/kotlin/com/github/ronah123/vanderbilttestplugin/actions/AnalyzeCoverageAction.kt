@@ -23,6 +23,23 @@ class AnalyzeCoverageAction : AnAction("TestCompass") {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
 
+        analyze(project)
+    }
+
+    /**
+     * Run the same coverage analysis from either the Tools action or the
+     * TestCompass tool-window icon.
+     *
+     * Tool-window content can also be created as a consequence of the Tools
+     * action showing its results. In that case [initialActivationOnly] keeps
+     * the factory from starting a duplicate background analysis.
+     */
+    fun analyze(project: Project, initialActivationOnly: Boolean = false) {
+        val hotspotsService = project.getService(
+            com.github.ronah123.vanderbilttestplugin.coverage.CoverageHotspotsService::class.java
+        )
+        if (!hotspotsService.beginAnalysis(initialActivationOnly)) return
+
         object : Task.Backgroundable(project, "Analyzing IDE Coverage", true) {
             override fun run(indicator: ProgressIndicator) {
                 indicator.text = "Reading current coverage suite…"
@@ -65,8 +82,7 @@ class AnalyzeCoverageAction : AnAction("TestCompass") {
                 val top = TOP_N?.let { n -> sorted.take(n) } ?: sorted
 
                 // Show in the tool window
-                project.getService(com.github.ronah123.vanderbilttestplugin.coverage.CoverageHotspotsService::class.java)
-                    .showInToolWindow(top)
+                hotspotsService.showInToolWindow(top)
             }
         }.queue()
     }

@@ -8,6 +8,7 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.util.PsiErrorElementUtil
 import com.github.ronah123.vanderbilttestplugin.services.MyProjectService
 import com.github.ronah123.vanderbilttestplugin.coverage.AmplifyChatClient
+import com.github.ronah123.vanderbilttestplugin.coverage.CoverageHotspotsService
 
 @TestDataPath("\$CONTENT_ROOT/src/test/testData")
 class MyPluginTest : BasePlatformTestCase() {
@@ -60,6 +61,14 @@ class MyPluginTest : BasePlatformTestCase() {
                 """{"success":true,"message":"ok","data":"Recommendation text"}"""
             )
         )
+    }
+
+    fun testToolWindowAnalysisRunsOnlyWhenNoOtherEntryPointHasStartedIt() {
+        val service = project.service<CoverageHotspotsService>()
+
+        assertTrue(service.beginAnalysis(initialActivationOnly = true))
+        assertFalse(service.beginAnalysis(initialActivationOnly = true))
+        assertTrue(service.beginAnalysis(initialActivationOnly = false))
     }
 
     override fun getTestDataPath() = "src/test/testData/rename"
