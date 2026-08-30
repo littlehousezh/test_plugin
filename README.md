@@ -53,16 +53,14 @@ Paste the raw token. A leading `Bearer` prefix is not required. You can also lea
 5. In the TestCompass tool window, review the ranked production methods. Methods with more missed lines appear first.
 6. Click `Generate recommendations`.
    - If no Amplify token is saved, enter the instructor-provided token in the setup dialog and click `OK`.
-   - TestCompass sends the relevant production source, existing tests, and missed coverage information to Amplify.
    - Generating and checking the recommendations may take a little while. You can monitor the current progress at the bottom of the IntelliJ IDEA window.
-7. Review the conceptual test recommendations. They describe the behavior, action, and expected result but do not generate test code automatically.
+7. Review the conceptual test recommendations.
 8. Add or improve the JUnit tests in your project.
 9. Run the tests with coverage again. TestCompass automatically analyzes the new coverage result and refreshes its tool window.
 
 ## Important Usage Notes
 
 - Run tests **with coverage before starting TestCompass**. A normal test run does not create the coverage data that TestCompass needs.
-- TestCompass analyzes the currently active IntelliJ coverage suite. Run all relevant tests together with coverage when you want recommendations based on the complete test suite.
 - Every completed IntelliJ coverage calculation automatically runs TestCompass using that new coverage result.
 - `Tools > TestCompass` remains available when you want to run the same analysis manually using the currently active coverage suite.
 - Recommendations are based on missed production lines and branches. Fully covered behavior may appear under `Already covered` instead of being recommended again.
@@ -81,9 +79,6 @@ Confirm that the active coverage run includes production classes from the curren
 
 Open IntelliJ IDEA `Settings`/`Preferences`, search for `TestCompass`, and replace the saved Amplify token with a current token from the instructor. Paste only the raw token.
 
-### Automatic analysis does not run after coverage
-
-Confirm that plugin version `0.0.7` or newer is installed under `Settings > Plugins`. Older ZIP installations do not include automatic analysis after each coverage run. If needed, uninstall the older version, install the latest ZIP from this README, and restart IntelliJ IDEA.
 
 
 ## Build For Marketplace
