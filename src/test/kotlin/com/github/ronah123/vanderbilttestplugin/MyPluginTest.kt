@@ -8,6 +8,8 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.intellij.util.PsiErrorElementUtil
 import com.github.ronah123.vanderbilttestplugin.services.MyProjectService
 import com.github.ronah123.vanderbilttestplugin.coverage.AmplifyChatClient
+import com.github.ronah123.vanderbilttestplugin.coverage.CodeExtraction
+import com.github.ronah123.vanderbilttestplugin.actions.MethodHit
 import com.github.ronah123.vanderbilttestplugin.startup.CoverageCalculatedListener
 import com.github.ronah123.vanderbilttestplugin.startup.CoverageRunTracker
 import com.intellij.coverage.CoverageSuite
@@ -97,6 +99,37 @@ class MyPluginTest : BasePlatformTestCase() {
         timestamp.incrementAndGet()
         listener.coverageDataCalculated(bundle)
         assertEquals(2, analysisCount)
+    }
+
+    fun testRecommendationContextIncludesEnclosingAndReferencedProductionClasses() {
+        myFixture.addFileToProject(
+            "src/Frame.java",
+            "public class Frame { public int getScore() { return 0; } }"
+        )
+        myFixture.addFileToProject(
+            "src/BowlingGame.java",
+            """
+                public class BowlingGame {
+                    private Frame bonus;
+                    private int calculateStrikeBonus(int index) {
+                        return bonus == null ? 0 : bonus.getScore();
+                    }
+                }
+            """.trimIndent()
+        )
+        val hit = MethodHit(
+            classFqn = "BowlingGame",
+            method = "calculateStrikeBonus(I)I",
+            totalLines = 2,
+            coveredLines = 1,
+            missedLines = 1,
+            linePct = 0.5
+        )
+
+        val bundles = CodeExtraction.resolveTopBundles(project, listOf(hit))
+        assertSize(1, bundles)
+        val sourceNames = bundles.single().method.productionSources.map { it.sourceFilePath?.substringAfterLast('/') }
+        assertContainsElements(sourceNames, "BowlingGame.java", "Frame.java")
     }
 
     private fun coverageBundle(timestamp: AtomicLong): CoverageSuitesBundle {

@@ -7,10 +7,18 @@ import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiFile
+import com.intellij.psi.PsiJavaCodeReferenceElement
 import com.intellij.psi.PsiManager
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.util.PsiTreeUtil
 import kotlin.math.min
+
+data class ProductionSourceBundle(
+    val classFqn: String,
+    val sourceFilePath: String?,
+    val sourceText: String
+)
 
 data class MethodBundle(
     val classFqn: String,
@@ -18,7 +26,8 @@ data class MethodBundle(
     val methodText: String,
     val sourceFilePath: String?,
     val startLine: Int?,
-    val endLine: Int?
+    val endLine: Int?,
+    val productionSources: List<ProductionSourceBundle>
 )
 
 data class MethodCoverageBundle(
@@ -103,8 +112,52 @@ object CodeExtraction {
             methodText = methodText,
             sourceFilePath = chosen.containingFile?.virtualFile?.path,
             startLine = startLine,
-            endLine = endLine
+            endLine = endLine,
+            productionSources = resolveProductionSources(project, psiClass)
         )
+    }
+
+    /**
+     * Include the complete source file containing the hotspot and the complete source
+     * files of directly referenced project classes. This gives the recommendation model
+     * callers, field state, indexing logic, and small domain collaborators such as Frame.
+     */
+    private fun resolveProductionSources(project: Project, psiClass: PsiClass): List<ProductionSourceBundle> {
+        val index = ProjectFileIndex.getInstance(project)
+        val primaryFile = psiClass.containingFile
+        val referencedClasses = PsiTreeUtil.findChildrenOfType(
+            psiClass,
+            PsiJavaCodeReferenceElement::class.java
+        ).asSequence()
+            .mapNotNull { it.resolve() as? PsiClass }
+            .filter { referenced ->
+                val file = referenced.containingFile?.virtualFile
+                file != null && index.isInContent(file) && !index.isInTestSourceContent(file)
+            }
+            .sortedBy { it.qualifiedName.orEmpty() }
+
+        return (sequenceOf(psiClass) + referencedClasses)
+            .mapNotNull { referenced ->
+                val file = referenced.containingFile
+                val virtualFile = file?.virtualFile ?: return@mapNotNull null
+                ProductionSourceBundle(
+                    classFqn = referenced.qualifiedName ?: referenced.name.orEmpty(),
+                    sourceFilePath = virtualFile.path,
+                    sourceText = file.text.take(CoverageAIConfig.MAX_PRODUCTION_FILE_CHARS)
+                )
+            }
+            .distinctBy { it.sourceFilePath ?: it.classFqn }
+            .take(CoverageAIConfig.MAX_PRODUCTION_FILES_TO_INCLUDE)
+            .toList()
+            .ifEmpty {
+                listOfNotNull(primaryFile?.let { file ->
+                    ProductionSourceBundle(
+                        classFqn = psiClass.qualifiedName ?: psiClass.name.orEmpty(),
+                        sourceFilePath = file.virtualFile?.path,
+                        sourceText = file.text.take(CoverageAIConfig.MAX_PRODUCTION_FILE_CHARS)
+                    )
+                })
+            }
     }
 
     // ====================== helpers for parsing (unchanged) ======================
@@ -232,7 +285,7 @@ object CodeExtraction {
         val header = """
 You are helping a student improve unit tests using IDE coverage results.
 
-Use the current test file, production source, and coverage hotspot metadata together. The coverage hotspot metadata is the source of truth for what needs coverage-driven recommendations.
+Use the current test files, complete production source context, and coverage hotspot metadata together. The production source is authoritative for control flow and expected behavior. The coverage hotspot metadata is the source of truth for what needs coverage-driven recommendations.
 
 Coverage-specific rules:
 - Recommend only conceptual test cases that address missed or partially covered lines/branches shown in the hotspot metadata.
@@ -242,6 +295,14 @@ Coverage-specific rules:
 - For private methods, recommend tests through public behavior rather than direct private-method calls.
 - Do not write test code. Provide names and behavior/assertion outlines only.
 - Keep the advice concise and actionable.
+
+Correctness check to perform internally before returning the response:
+- Trace every proposed action from the public method through the supplied production code.
+- Claim that a missed line is covered only when the proposed setup actually reaches that line, including all preceding conditions and zero-based indexes.
+- Calculate the exact expected observable result from the production code and state a literal assertion value, such as assertEquals(46, game.score()) or assertEquals("(0,2,N)", rover.execute("b")).
+- Check that the Covers, Action, and Expected lines agree with one another and do not duplicate another recommendation or an existing test.
+- If the exact expected result or reachability cannot be established from the supplied context, do not recommend that case.
+- Perform this check silently; return only the requested recommendations.
 
 Response format:
 - Return plain text only. Do not use LaTeX, Markdown, HTML, tables, or code fences.
@@ -283,6 +344,20 @@ Test-quality requirements to apply without naming or restating them as a separat
         } else {
             sb.appendLine()
             sb.appendLine("===== No relevant test files found in project content =====")
+        }
+
+        val productionSources = bundles.asSequence()
+            .flatMap { it.method.productionSources.asSequence() }
+            .distinctBy { it.sourceFilePath ?: it.classFqn }
+            .take(CoverageAIConfig.MAX_PRODUCTION_FILES_TO_INCLUDE)
+            .toList()
+
+        sb.appendLine()
+        sb.appendLine("===== Complete production source context =====")
+        productionSources.forEachIndexed { index, source ->
+            sb.appendLine()
+            sb.appendLine("----- Production source ${index + 1}: ${source.sourceFilePath ?: source.classFqn} -----")
+            sb.appendLine(fence(source.sourceText, source.sourceFilePath))
         }
 
         sb.appendLine()

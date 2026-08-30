@@ -8,6 +8,8 @@
 ### Changed
 - Automatically run TestCompass and update its tool window whenever IntelliJ finishes calculating new coverage results.
 - Keep `Tools > TestCompass` available as a manual analysis and refresh option.
+- Include complete enclosing production source and directly referenced project classes in recommendation prompts.
+- Require an internal reachability and exact-expected-value consistency check before recommendations are returned.
 
 ## [0.0.6]
 ### Changed

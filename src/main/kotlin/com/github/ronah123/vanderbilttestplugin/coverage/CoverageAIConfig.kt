@@ -8,6 +8,8 @@ object CoverageAIConfig {
     const val MAX_TEST_FILES_TO_INCLUDE = 3
     const val MAX_METHOD_CHARS = 3500
     const val MAX_TEST_FILE_CHARS = 20000
+    const val MAX_PRODUCTION_FILE_CHARS = 20000
+    const val MAX_PRODUCTION_FILES_TO_INCLUDE = 6
     const val MAX_PROMPT_CHARS = 60000
 
     private const val DEFAULT_AMPLIFY_BASE = "https://prod-api.vanderbilt.ai"
