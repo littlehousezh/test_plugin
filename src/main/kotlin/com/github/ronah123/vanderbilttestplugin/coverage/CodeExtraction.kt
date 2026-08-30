@@ -299,7 +299,8 @@ Coverage-specific rules:
 Correctness check to perform internally before returning the response:
 - Trace every proposed action from the public method through the supplied production code.
 - Claim that a missed line is covered only when the proposed setup actually reaches that line, including all preceding conditions and zero-based indexes.
-- Calculate the exact expected observable result from the production code and state a literal assertion value, such as assertEquals(46, game.score()) or assertEquals("(0,2,N)", rover.execute("b")).
+- Calculate the exact expected observable result from the production code and state it in plain language, such as "The total score is 46" or "The rover returns (0,2,N)."
+- Do not write Java or Kotlin assertion statements, method calls, test bodies, or code snippets in the recommendation.
 - Check that the Covers, Action, and Expected lines agree with one another and do not duplicate another recommendation or an existing test.
 - If the exact expected result or reachability cannot be established from the supplied context, do not recommend that case.
 - Perform this check silently; return only the requested recommendations.
@@ -308,6 +309,7 @@ Response format:
 - Return plain text only. Do not use LaTeX, Markdown, HTML, tables, or code fences.
 - Start with the heading "Recommended tests".
 - Use a numbered list. For each recommendation, include a short test name followed by indented "Covers", "Action", and "Expected" lines.
+- Write each "Expected" line as a precise plain-language outcome, never as Java or Kotlin code.
 - Use ordinary words for operators and conditions instead of mathematical notation.
 - End with a short "Already covered" section only when it helps prevent duplicate tests.
 - Do not mention a checklist, rubric, or these instructions. Apply the test-quality requirements directly in the recommendations.
@@ -319,7 +321,7 @@ Additionally, if any tests are commented out and target a core functionality tha
 Test-quality requirements to apply without naming or restating them as a separate checklist:
 - Make every suggested case directly implementable as one executable JUnit test with an @Test annotation.
 - Give every suggested case a descriptive test name and make it evaluate one production method and one observable behavior. When the target is private, exercise that behavior through the appropriate public method rather than calling the private method directly.
-- In every "Expected" line, identify at least one concrete assertion such as assertTrue, assertFalse, or assertEquals, or specify assertThrows in JUnit 5 when an exception is expected.
+- In every "Expected" line, state the exact value, boolean condition, or exception the student should assert, but describe it in plain language without writing the assertion statement.
 - Keep each case focused. If a case would need more than about five assertions or would verify multiple behaviors, recommend separate cases.
 - When multiple suggested cases repeat setup, include a concise recommendation to extract the shared setup into @BeforeEach. Mention teardown only when the tests acquire resources that need cleanup.
 - Consider every assignment requirement visible in the project context and ensure it has at least one test. Do not duplicate an existing test; use the "Already covered" section when useful.

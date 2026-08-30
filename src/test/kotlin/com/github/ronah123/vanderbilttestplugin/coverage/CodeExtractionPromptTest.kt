@@ -2,6 +2,7 @@ package com.github.ronah123.vanderbilttestplugin.coverage
 
 import com.github.ronah123.vanderbilttestplugin.actions.MethodHit
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -35,7 +36,7 @@ class CodeExtractionPromptTest {
     }
 
     @Test
-    fun `requires reachability and exact expected values`() {
+    fun `requires reachability and exact expected values in prose`() {
         val method = MethodBundle(
             classFqn = "Example",
             methodName = "run",
@@ -48,10 +49,14 @@ class CodeExtractionPromptTest {
         val hit = MethodHit("Example", "run()I", 1, 0, 1, 0.0, listOf(1))
 
         val prompt = CodeExtraction.buildPrompt(listOf(MethodCoverageBundle(hit, method)), emptyList())
+        val instructions = prompt.substringBefore("===== No relevant test files found in project content =====")
 
         assertTrue(prompt.contains("proposed setup actually reaches that line"))
         assertTrue(prompt.contains("zero-based indexes"))
-        assertTrue(prompt.contains("literal assertion value"))
+        assertTrue(prompt.contains("The total score is 46"))
+        assertTrue(prompt.contains("precise plain-language outcome"))
+        assertTrue(prompt.contains("without writing the assertion statement"))
+        assertFalse(instructions.contains("assertEquals("))
         assertTrue(prompt.contains("Covers, Action, and Expected lines agree"))
     }
 }

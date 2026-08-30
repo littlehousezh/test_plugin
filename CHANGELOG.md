@@ -10,6 +10,7 @@
 - Keep `Tools > TestCompass` available as a manual analysis and refresh option.
 - Include complete enclosing production source and directly referenced project classes in recommendation prompts.
 - Require an internal reachability and exact-expected-value consistency check before recommendations are returned.
+- Present exact expected outcomes in plain language without generating assertion code or test snippets.
 
 ## [0.0.6]
 ### Changed
