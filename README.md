@@ -54,7 +54,8 @@ Paste the raw token. A leading `Bearer` prefix is not required. You can also lea
 6. Click `Generate recommendations`.
    - If no Amplify token is saved, enter the instructor-provided token in the setup dialog and click `OK`.
    - TestCompass sends the relevant production source, existing tests, and missed coverage information to Amplify.
-7. Review the conceptual test recommendations. They describe the behavior, action, and expected assertion but do not generate test code automatically.
+   - Generating and checking the recommendations may take a little while. You can monitor the current progress at the bottom of the IntelliJ IDEA window.
+7. Review the conceptual test recommendations. They describe the behavior, action, and expected result but do not generate test code automatically.
 8. Add or improve the JUnit tests in your project.
 9. Run the tests with coverage again. TestCompass automatically analyzes the new coverage result and refreshes its tool window.
 

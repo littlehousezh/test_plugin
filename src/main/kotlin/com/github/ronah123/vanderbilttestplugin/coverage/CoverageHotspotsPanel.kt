@@ -158,8 +158,15 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
                     prompt
 
                 var error: Throwable? = null
+                var verificationPrompt = promptToSend
                 val response = try {
-                    client.chatOnce(promptToSend)
+                    val result = RecommendationGenerator(client).generate(
+                        contextPrompt = promptToSend,
+                        beforeVerification = { indicator.text = "Reviewing recommendation accuracy…" },
+                        beforeCorrection = { indicator.text = "Correcting inconsistent recommendations…" }
+                    )
+                    verificationPrompt = result.finalPrompt
+                    result.recommendations
                 } catch (t: Throwable) {
                     error = t
                     log.warn("Chat API failed", t)
@@ -169,7 +176,7 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
                 ApplicationManager.getApplication().invokeLater {
                     project.getService(AIInteractionLoggerService::class.java)
                         ?.logAiInteraction(
-                            promptToSend,
+                            verificationPrompt,
                             response,
                             client.resolvedModelId ?: modelId.ifBlank { "Amplify account default" },
                             amplifyBase,

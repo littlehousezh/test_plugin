@@ -295,6 +295,9 @@ Coverage-specific rules:
 - For private methods, recommend tests through public behavior rather than direct private-method calls.
 - Do not write test code. Provide names and behavior/assertion outlines only.
 - Keep the advice concise and actionable.
+- Write for a novice programmer. Use short, direct sentences and explain the behavior instead of relying on source-line numbers or bowling jargon alone.
+- Make every Action fully specified. Include exact grid dimensions and command sequences for rover cases. Include the exact number of frames, both throw values for every repeated frame type, and all bonus throws for bowling cases.
+- Never use vague setup phrases such as "open frames" unless the pin values for those frames are also stated.
 
 Correctness check to perform internally before returning the response:
 - Trace every proposed action from the public method through the supplied production code.
@@ -395,6 +398,55 @@ Test-quality requirements to apply without naming or restating them as a separat
         return enforceGlobalBudget(sb.toString())
     }
 
+    /** Ask a second model pass to independently verify the draft before display. */
+    fun buildVerificationPrompt(contextPrompt: String, draft: String): String {
+        val header = """
+You are the final accuracy and clarity reviewer for unit-test recommendations written for a novice programmer.
+
+Independently check the draft against the complete production source, existing tests, and coverage metadata below. Do not trust the draft's arithmetic or claimed control flow.
+
+Required review:
+- Trace each Action through the public method and verify that it reaches every line or behavior claimed by Covers.
+- Recalculate every Expected result from scratch. For bowling, separately total the base frame scores and every spare or strike bonus. For command-driven code, simulate every command in order.
+- Make every setup unambiguous. State exact grid sizes and command sequences. For bowling, state how many repeated frames are created and the first and second throw values used in them, plus all bonus throws.
+- Remove a recommendation if its result cannot be determined exactly, it duplicates an existing test, or it does not reach the claimed uncovered behavior.
+- Use wording a novice can follow without having to infer missing values. Describe the behavior before optional source-line references and briefly clarify unfamiliar terms when needed.
+- Preserve the test-quality requirements in the original context: one public method and one behavior per test, an exact outcome to assert, focused assertions, useful shared setup, requirements coverage, and fault-revealing cases for evidenced bugs.
+- Return exactly one valid JSON object and no surrounding prose or code fence. Use this shape:
+  {"recommendations":[{"name":"...","covers":"...","action":"...","expected":"...","targetLines":[1],"reachableLines":[1],"commandSequence":"rrb","movement":"backward","gridWidth":3,"gridHeight":3,"bowlingFrames":[{"firstThrow":1,"secondThrow":1}],"bowlingBonus":null,"expectedNumericTotal":null}],"alreadyCovered":"..."}
+- For Mars Rover, fill commandSequence, movement, gridWidth, and gridHeight; use an empty bowlingFrames array.
+- For bowling, expand bowlingFrames to one object per actual frame, provide bowlingBonus when used, and provide expectedNumericTotal; leave rover-only fields empty or zero.
+- Student-facing name, covers, action, expected, and alreadyCovered values must remain plain-language guidance without Java or Kotlin assertion statements, method calls, test bodies, or code snippets.
+
+===== DRAFT RECOMMENDATIONS TO REVIEW =====
+$draft
+
+===== ORIGINAL SOURCE, TEST, AND COVERAGE CONTEXT =====
+""".trimIndent()
+
+        val remaining = (CoverageAIConfig.MAX_PROMPT_CHARS - header.length).coerceAtLeast(0)
+        return header + compactReviewContext(contextPrompt, remaining)
+    }
+
+    fun buildCorrectionPrompt(contextPrompt: String, invalidResponse: String, errors: List<String>): String {
+        val errorText = errors.joinToString("\n") { "- $it" }
+        val header = """
+The structured recommendation review failed deterministic accuracy checks. Correct every listed problem using the original source and tests. Do not preserve an invalid recommendation merely to keep the same number of items.
+
+Validation errors:
+$errorText
+
+Return exactly one corrected JSON object using the same schema as the invalid response, with no surrounding prose or code fence. Ensure titles and Covers use the same forward/backward behavior as commandSequence. Include exact constructor inputs and setup values. Recalculate all expected results before responding.
+
+===== INVALID STRUCTURED RESPONSE =====
+$invalidResponse
+
+===== ORIGINAL SOURCE, TEST, AND COVERAGE CONTEXT =====
+""".trimIndent()
+        val remaining = (CoverageAIConfig.MAX_PROMPT_CHARS - header.length).coerceAtLeast(0)
+        return header + compactReviewContext(contextPrompt, remaining)
+    }
+
     private fun fence(code: String, hint: String?): String {
         val lang = when {
             hint?.endsWith(".kt") == true || hint?.endsWith(".kts") == true -> "kotlin"
@@ -446,6 +498,15 @@ Test-quality requirements to apply without naming or restating them as a separat
                 "line $lineNumber"
             }
         }
+    }
+
+    private fun compactReviewContext(context: String, maxChars: Int): String {
+        if (context.length <= maxChars) return context
+        if (maxChars <= 80) return context.take(maxChars)
+        val marker = "\n... [middle of original context omitted for review budget] ...\n"
+        val available = (maxChars - marker.length).coerceAtLeast(0)
+        val beginning = available / 2
+        return context.take(beginning) + marker + context.takeLast(available - beginning)
     }
 
 }

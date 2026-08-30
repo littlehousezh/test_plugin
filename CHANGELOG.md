@@ -11,6 +11,9 @@
 - Include complete enclosing production source and directly referenced project classes in recommendation prompts.
 - Require an internal reachability and exact-expected-value consistency check before recommendations are returned.
 - Present exact expected outcomes in plain language without generating assertion code or test snippets.
+- Add a second accuracy-review pass that independently recalculates expected results and verifies control-flow reachability before recommendations are displayed.
+- Require novice-friendly actions with exact command sequences, grid sizes, frame counts, throw values, and bonus values.
+- Validate structured recommendations locally by simulating Mars Rover commands and calculating BowlingGame scores, with at most one AI repair request when checks fail.
 
 ## [0.0.6]
 ### Changed
