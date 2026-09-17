@@ -14,10 +14,16 @@ data class RecommendationQualityResult(
 
 /** Deterministic checks for the two assignment domains before advice reaches students. */
 object RecommendationQualityGate {
+    private val jsonFence = Regex("\\A```(?:json)?\\s*\\n([\\s\\S]*?)\\n```\\z", RegexOption.IGNORE_CASE)
 
     fun validateAndRender(raw: String, context: String): RecommendationQualityResult {
-        val root = runCatching { JSONObject(raw.trim()) }.getOrElse {
-            return RecommendationQualityResult("", listOf("The review response was not valid JSON."), 0, 0)
+        val trimmed = raw.trim()
+        val json = jsonFence.matchEntire(trimmed)?.groupValues?.get(1) ?: trimmed
+        val root = runCatching { JSONObject(json) }.getOrElse {
+            return RecommendationQualityResult(
+                "Could not generate verified recommendations because the review response was not valid JSON. Please try again.",
+                listOf("The review response was not valid JSON."), 0, 0
+            )
         }
         val items = root.optJSONArray("recommendations") ?: JSONArray()
         val errors = mutableListOf<String>()

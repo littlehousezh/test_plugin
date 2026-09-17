@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [0.0.8]
+
+### Fixed
+- Always display a readable explanation when model output is empty or contains only formatting.
+- Preserve model responses when accuracy review or correction fails, clearly marking them as unverified instead of discarding them.
+- Convert structured model responses into readable labels and prevent interaction-log failures from hiding the results dialog.
+- Retry empty Amplify responses once with another account-authorized model and retain the working model for recommendation review; preserve immediate authentication, access, and quota failures.
+- Build against the declared IntelliJ platform version by default to avoid incompatible Kotlin metadata from a newer locally installed IDE.
+
 ## [0.0.7]
 ### Changed
 - Automatically run TestCompass and update its tool window whenever IntelliJ finishes calculating new coverage results.

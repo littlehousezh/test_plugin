@@ -8,6 +8,27 @@ import org.junit.Test
 class RecommendationQualityGateTest {
 
     @Test
+    fun `accepts a complete JSON code fence without weakening validation`() {
+        val raw = "```json\n${bowlingRecommendation(62)}\n```"
+        val result = RecommendationQualityGate.validateAndRender(raw, "class BowlingGame {}")
+
+        assertTrue(result.isFullyValid)
+        assertEquals(1, result.validCount)
+        assertFalse(RecommendationQualityGate.validateAndRender(
+            "```json\n${bowlingRecommendation(52)}\n```", "class BowlingGame {}"
+        ).isFullyValid)
+    }
+
+    @Test
+    fun `invalid or empty JSON gives a visible explanation`() {
+        for (raw in listOf("", "not JSON", "{\"recommendations\":[", "{}")) {
+            val result = RecommendationQualityGate.validateAndRender(raw, "source context")
+            assertFalse(result.isFullyValid)
+            assertTrue(result.rendered.isNotBlank())
+        }
+    }
+
+    @Test
     fun `rejects backward title paired with forward rover command`() {
         val raw = marsRecommendation(
             name = "Wrap backward from the west",

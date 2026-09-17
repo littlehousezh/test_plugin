@@ -174,14 +174,16 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
                 }
 
                 ApplicationManager.getApplication().invokeLater {
-                    project.getService(AIInteractionLoggerService::class.java)
-                        ?.logAiInteraction(
+                    // A disk/logging failure must not prevent users from seeing the answer.
+                    runCatching {
+                        project.getService(AIInteractionLoggerService::class.java)?.logAiInteraction(
                             verificationPrompt,
                             response,
                             client.resolvedModelId ?: modelId.ifBlank { "Amplify account default" },
                             amplifyBase,
                             error
                         )
+                    }.onFailure { log.warn("Could not save the recommendation interaction log", it) }
                     RecommendationsDialog(project, response).show()
                 }
             }

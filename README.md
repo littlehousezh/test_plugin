@@ -79,6 +79,16 @@ Confirm that the active coverage run includes production classes from the curren
 
 Open IntelliJ IDEA `Settings`/`Preferences`, search for `TestCompass`, and replace the saved Amplify token with a current token from the instructor. Paste only the raw token.
 
+### Recommendations are blank or cannot be verified
+
+An earlier response-handling bug could display a blank window when the AI review was not valid JSON. The client could also corrupt JSON escapes or pass API errors into the review step. The fix preserves escaped text, accepts JSON enclosed in a Markdown code fence, and shows a clear message when generation fails. Invalid recommendations still do not pass the accuracy checks.
+
+If the updated plugin reports an authentication or access error, check the saved token or ask the instructor to check model access. For a request limit, wait and retry. For an invalid review response, try generating again.
+
+Amplify can also accept a request but return empty text. TestCompass now retries once with another model advertised as available to your account, preferring `us.openai.gpt-5.6-luna` when available, then uses the working model for the remaining review steps. This may add one model request. Authentication, access, and quota errors are not retried. If both models return empty text, the error identifies the models instead of suggesting that the token is invalid. You can select a preferred available model with `AMPLIFY_MODEL_ID` in the IDE environment or `plugin.env`.
+
+If a later review or correction fails, TestCompass keeps the last readable model answer and labels it **unverified**. Check its expected results against your code before using it. Structured answers are displayed with readable labels. If no answer was returned at all, the window explains that rather than showing a blank result. A model or network failure can still prevent recommendations, but an empty response is never presented as an empty window.
+
 
 
 ## Build For Marketplace

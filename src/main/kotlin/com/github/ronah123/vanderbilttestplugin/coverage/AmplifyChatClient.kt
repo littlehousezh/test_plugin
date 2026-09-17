@@ -1,41 +1,56 @@
 package com.github.ronah123.vanderbilttestplugin.coverage
 
 import com.intellij.util.concurrency.AppExecutorUtil
-import org.apache.commons.text.StringEscapeUtils
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.net.URI
 import java.net.http.HttpClient
-import java.net.http.HttpHeaders
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
-import java.text.Normalizer
 import java.time.Duration
 
 class AmplifyChatClient(
     private val baseUrl: String,
     private val bearerToken: String,
     private val preferredModelId: String,
-    private val debug: Boolean = true
+    private val client: HttpClient = HttpClient.newBuilder()
+        .executor(AppExecutorUtil.getAppExecutorService())
+        .connectTimeout(Duration.ofSeconds(15))
+        .build()
 ) : ChatClient {
 
     @Volatile
     var resolvedModelId: String? = null
         private set
 
-    private val client: HttpClient = HttpClient.newBuilder()
-        .executor(AppExecutorUtil.getAppExecutorService())
-        .connectTimeout(Duration.ofSeconds(15))
-        .build()
+    private var recoveryModelId: String? = null
 
     override fun chatOnce(prompt: String): String {
-        val modelId = try {
-            resolveModelId()
-        } catch (e: AmplifyRequestException) {
-            return e.message ?: "Unable to select an Amplify model."
+        // Failures must reach the UI's error handler, never become review prompts.
+        val modelId = resolveModelId()
+        requestChat(prompt, modelId)?.let { return it }
+
+        // Amplify can return HTTP 200 / success=true with an empty data string.
+        // Retry only empty output, once per client, using another authorized model.
+        // Authentication, quota, API errors, and malformed JSON still fail immediately.
+        val alternative = recoveryModelId
+        recoveryModelId = null
+        if (alternative != null) {
+            requestChat(prompt, alternative)?.let {
+                resolvedModelId = alternative
+                return it
+            }
         }
+        val attempted = if (alternative == null) modelId else "$modelId and $alternative"
+        throw AmplifyRequestException(
+            "Amplify accepted the request but returned empty recommendation text from $attempted. " +
+                "Check these models in Amplify or choose another available model with AMPLIFY_MODEL_ID."
+        )
+    }
+
+    private fun requestChat(prompt: String, modelId: String): String? {
         val payload = payloadWrappedExact(prompt, modelId)
 
         val req = HttpRequest.newBuilder()
@@ -48,21 +63,10 @@ class AmplifyChatClient(
 
         val res = execute(req)
 
-        if (res.status in 200..299) {
-            extractContentSmart(res.body)?.let { return it }
-            // Fallback (should be rare): return raw body
-            return res.body
-        }
-
-        if (res.status == 401) {
-            return """
-                Amplify authentication failed (HTTP 401).
-
-                Check TestCompass settings and make sure the Amplify token is current and pasted as the raw token only, without quotes or an extra "Bearer " prefix.
-            """.trimIndent()
-        }
-
-        return errorDump("Chat API request failed", res, payload)
+        checkStatus(res.status)
+        val root = parseResponse(res.body)
+        checkSuccess(root)
+        return extractContentSmart(res.body)?.takeIf { it.isNotBlank() }
     }
 
     /**
@@ -80,16 +84,8 @@ class AmplifyChatClient(
             .build()
         val res = execute(req)
 
-        if (res.status == 401) {
-            throw AmplifyRequestException(
-                "Amplify authentication failed (HTTP 401). Check that the saved token is current."
-            )
-        }
-        if (res.status !in 200..299) {
-            throw AmplifyRequestException(
-                "Could not retrieve models available to this Amplify token (HTTP ${res.status})."
-            )
-        }
+        checkStatus(res.status)
+        checkSuccess(parseResponse(res.body))
 
         val selected = runCatching {
             selectAvailableModel(res.body, preferredModelId)
@@ -99,6 +95,11 @@ class AmplifyChatClient(
             "Amplify did not return any models available to this token. Ask the token administrator to grant chat model access."
         )
 
+        val availableIds = availableModelIds(parseResponse(res.body).optJSONObject("data"))
+        // Prefer the model verified in successful recommendation runs, but never
+        // send a model ID that this account's /available_models did not advertise.
+        recoveryModelId = RECOVERY_MODEL_ID.takeIf { it != selected && it in availableIds }
+            ?: availableIds.firstOrNull { it != selected }
         resolvedModelId = selected
         return selected
     }
@@ -162,7 +163,6 @@ class AmplifyChatClient(
 
     private data class HttpResult(
         val status: Int,
-        val headers: HttpHeaders,
         val body: String
     )
 
@@ -170,42 +170,41 @@ class AmplifyChatClient(
         // Decode as UTF-8 explicitly to avoid platform charset issues
         val resp = client.send(req, HttpResponse.BodyHandlers.ofByteArray())
         val bodyUtf8 = String(resp.body(), StandardCharsets.UTF_8)
-        return HttpResult(resp.statusCode(), resp.headers(), bodyUtf8)
+        return HttpResult(resp.statusCode(), bodyUtf8)
     }
 
-    private fun errorDump(title: String, res: HttpResult, requestBody: String): String {
-        val sb = StringBuilder()
-        sb.append(title).append('\n')
-        sb.append("HTTP ").append(res.status).append('\n')
-        sb.append("Headers:\n")
-        res.headers.map().forEach { (k, v) ->
-            sb.append("  ").append(k).append(": ").append(v.joinToString(", ")).append('\n')
+    private fun checkStatus(status: Int) {
+        if (status in 200..299) return
+        val message = when (status) {
+            401 -> "Amplify authentication failed (HTTP 401). Check that the saved token is current in TestCompass settings."
+            403 -> "Amplify denied access (HTTP 403). Ask the token administrator to check chat model access."
+            429 -> "Amplify request limit reached (HTTP 429). Please try again later."
+            else -> "Amplify request failed (HTTP $status). Please try again or contact the token administrator."
         }
-        sb.append('\n')
-        val bodyPreview = res.body.let { it.take(16_384) + if (it.length > 16_384) "\n…(truncated)…" else "" }
-        sb.append("Response body:\n").append(bodyPreview).append('\n')
+        throw AmplifyRequestException(message)
+    }
 
-        if (debug) {
-            val reqPreview = requestBody.take(4096) + if (requestBody.length > 4096) "\n…(truncated)…" else ""
-            sb.append("\n--- Request payload preview ---\n").append(reqPreview).append('\n')
+    private fun parseResponse(body: String): JSONObject = runCatching { JSONObject(body) }.getOrElse {
+        throw AmplifyRequestException("Amplify returned an invalid API response. Please try again.")
+    }
+
+    private fun checkSuccess(root: JSONObject) {
+        if (root.has("success") && !root.optBoolean("success", true) ||
+            root.has("error") && !root.isNull("error")) {
+            // Do not include raw server responses: they may echo credentials or source code.
+            throw AmplifyRequestException("Amplify reported a request failure. Please try again or ask the token administrator to check access and quota.")
         }
-        return sb.toString()
     }
 
     private class AmplifyRequestException(message: String, cause: Throwable? = null) : IOException(message, cause)
 
     companion object {
+        private const val RECOVERY_MODEL_ID = "us.openai.gpt-5.6-luna"
+
         /** Select only IDs that Amplify says are available to this token. */
         internal fun selectAvailableModel(body: String, preferredModelId: String): String? {
             val data = JSONObject(body).optJSONObject("data") ?: return null
-            val models = data.optJSONArray("models") ?: JSONArray()
-            val availableIds = buildList {
-                for (index in 0 until models.length()) {
-                    models.optJSONObject(index)?.optString("id")
-                        ?.takeIf { it.isNotBlank() }
-                        ?.let(::add)
-                }
-            }
+            val availableIds = availableModelIds(data)
 
             preferredModelId.trim().takeIf { it in availableIds }?.let { return it }
 
@@ -214,6 +213,17 @@ class AmplifyChatClient(
             if (defaultId != null && defaultId in availableIds) return defaultId
 
             return availableIds.firstOrNull()
+        }
+
+        private fun availableModelIds(data: JSONObject?): List<String> {
+            val models = data?.optJSONArray("models") ?: JSONArray()
+            return buildList {
+                for (index in 0 until models.length()) {
+                    models.optJSONObject(index)?.optString("id")
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let(::add)
+                }
+            }.distinct()
         }
 
         /**
@@ -225,8 +235,10 @@ class AmplifyChatClient(
             if (trimmed.isEmpty() || trimmed.first() != '{') return null
 
             val root = JSONObject(trimmed)
-            extractText(root.opt("data"))?.let { return sanitizeModelText(it) }
-            extractText(root)?.let { return sanitizeModelText(it) }
+            // JSONObject already decoded the envelope. A second unescape corrupts
+            // escapes inside the model's JSON (for example, an embedded \\n).
+            extractText(root.opt("data"))?.let { return it }
+            extractText(root)?.let { return it }
             return null
         }
 
@@ -245,10 +257,5 @@ class AmplifyChatClient(
             return null
         }
 
-        private fun sanitizeModelText(s: String): String {
-            val needsUnescape = s.contains("\\u") || s.contains("\\n") || s.contains("\\t") || s.contains("\\r")
-            val unescapedOnce = if (needsUnescape) StringEscapeUtils.unescapeJava(s) else s
-            return Normalizer.normalize(unescapedOnce, Normalizer.Form.NFC)
-        }
     }
 }
