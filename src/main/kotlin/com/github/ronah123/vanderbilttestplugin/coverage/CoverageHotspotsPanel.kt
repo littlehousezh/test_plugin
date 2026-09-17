@@ -36,6 +36,13 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
         override fun isCellEditable(row: Int, column: Int) = false
     }
     private var currentRows: List<MethodHit> = emptyList()
+    // Button actions and Task.onFinished both run on the event dispatch thread.
+    private var generationInProgress = false
+
+    private val generateButton = JButton("Generate recommendations").apply {
+        toolTipText = "Generate recommendations and check their accuracy"
+        addActionListener { onGenerateRecommendationsClicked() }
+    }
 
     private val table = JBTable(model).apply {
         setShowGrid(false)
@@ -58,11 +65,11 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
         border = JBUI.Borders.empty(6, 8)
         add(JBLabel("TestCompass coverage hotspots"), BorderLayout.WEST)
 
-        val generateBtn = JButton("Generate recommendations").apply {
-            toolTipText = "Use Amplify to suggest better tests for top methods"
-            addActionListener { onGenerateRecommendationsClicked() }
-        }
-        add(generateBtn, BorderLayout.EAST)
+        add(generateButton, BorderLayout.EAST)
+        add(JBLabel("<html>Please wait for the current request to finish. " +
+            "Repeated requests may use up your account allowance.</html>").apply {
+            border = JBUI.Borders.emptyTop(6)
+        }, BorderLayout.SOUTH)
     }
 
     init {
@@ -92,6 +99,8 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
     }
 
     private fun onGenerateRecommendationsClicked() {
+        if (generationInProgress) return
+
         val settings = getApplication().getService(CoverageSettings::class.java)
         if (!settings.isConfigured()) {
             if (!TestCompassSetupDialog(project, settings).showAndGet() || !settings.isConfigured()) {
@@ -124,7 +133,11 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
             return
         }
 
-        object : Task.Backgroundable(project, "Generating test recommendations", true) {
+        val task = object : Task.Backgroundable(project, "Generating test recommendations", true) {
+            override fun onFinished() {
+                setGenerationInProgress(false)
+            }
+
             override fun run(indicator: ProgressIndicator) {
                 indicator.isIndeterminate = true
                 indicator.text = "Collecting source & tests…"
@@ -187,9 +200,21 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
                     RecommendationsDialog(project, response).show()
                 }
             }
-        }.queue()
+        }
+        setGenerationInProgress(true)
+        try {
+            task.queue()
+        } catch (t: Throwable) {
+            setGenerationInProgress(false)
+            throw t
+        }
     }
 
+    private fun setGenerationInProgress(running: Boolean) {
+        generationInProgress = running
+        generateButton.isEnabled = !running
+        generateButton.text = if (running) "Generating…" else "Generate recommendations"
+    }
 
     private fun info(text: String) {
         ApplicationManager.getApplication().invokeLater {

@@ -7,6 +7,7 @@
 ## [0.0.8]
 
 ### Fixed
+- Prevent repeated recommendation clicks while generation and accuracy review are running, and remind users to wait to avoid unnecessary account usage.
 - Always display a readable explanation when model output is empty or contains only formatting.
 - Preserve model responses when accuracy review or correction fails, clearly marking them as unverified instead of discarding them.
 - Convert structured model responses into readable labels and prevent interaction-log failures from hiding the results dialog.

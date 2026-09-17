@@ -81,6 +81,8 @@ Open IntelliJ IDEA `Settings`/`Preferences`, search for `TestCompass`, and repla
 
 ### Recommendations are blank or cannot be verified
 
+Click **Generate recommendations** once and wait. The button shows **Generating…** and stays disabled while generation and accuracy review are running. It becomes available again when the task finishes, fails, or ends after cancellation. Repeated requests may use up your account allowance, especially when an account or token is shared. The accuracy review remains enabled to help catch incorrect advice.
+
 An earlier response-handling bug could display a blank window when the AI review was not valid JSON. The client could also corrupt JSON escapes or pass API errors into the review step. The fix preserves escaped text, accepts JSON enclosed in a Markdown code fence, and shows a clear message when generation fails. Invalid recommendations still do not pass the accuracy checks.
 
 If the updated plugin reports an authentication or access error, check the saved token or ask the instructor to check model access. For a request limit, wait and retry. For an invalid review response, try generating again.
