@@ -26,11 +26,19 @@ class AmplifyChatClient(
         private set
 
     private var recoveryModelId: String? = null
+    private var modelDiscoveryFailure: String? = null
 
     override fun chatOnce(prompt: String): String {
         // Failures must reach the UI's error handler, never become review prompts.
         val modelId = resolveModelId()
-        requestChat(prompt, modelId)?.let { return it }
+        try {
+            requestChat(prompt, modelId)?.let { return it }
+        } catch (failure: IOException) {
+            val discoveryFailure = modelDiscoveryFailure ?: throw failure
+            throw AmplifyRequestException(
+                "$discoveryFailure Direct chat with $modelId also failed: ${failure.message}", failure
+            )
+        }
 
         // Amplify can return HTTP 200 / success=true with an empty data string.
         // Retry only empty output, once per client, using another authorized model.
@@ -64,17 +72,21 @@ class AmplifyChatClient(
         val res = execute(req)
 
         checkStatus(res.status)
-        val root = parseResponse(res.body)
+        val root = parseResponse(res, "/chat")
         checkSuccess(root)
         return extractContentSmart(res.body)?.takeIf { it.isNotBlank() }
     }
 
-    /**
-     * Amplify model access is account-specific. Resolve the configured preference
-     * against /available_models and otherwise use the server-provided default.
-     */
+    /** Resolve the account default when possible, with a direct-chat recovery path. */
     private fun resolveModelId(): String {
         resolvedModelId?.let { return it }
+
+        // An explicitly configured ID is an opt-in to bypass model discovery.
+        // Amplify will still verify access when /chat is called.
+        preferredModelId.trim().takeIf { it.isNotEmpty() }?.let {
+            resolvedModelId = it
+            return it
+        }
 
         val req = HttpRequest.newBuilder()
             .uri(URI.create("${baseUrl.trimEnd('/')}/available_models"))
@@ -82,26 +94,39 @@ class AmplifyChatClient(
             .header("Accept", "application/json")
             .GET()
             .build()
-        val res = execute(req)
+        for (attempt in 1..2) {
+            val res = execute(req)
+            if (res.status in 500..599) {
+                modelDiscoveryFailure = "Amplify /available_models failed with HTTP ${res.status}."
+                if (attempt == 1) continue
+                break
+            }
+            checkStatus(res.status)
+            val root = try {
+                parseResponse(res, "/available_models")
+            } catch (failure: InvalidApiResponseException) {
+                modelDiscoveryFailure = failure.message
+                if (attempt == 1) continue
+                break
+            }
+            checkSuccess(root)
 
-        checkStatus(res.status)
-        checkSuccess(parseResponse(res.body))
+            val data = root.optJSONObject("data")
+            val availableIds = availableModelIds(data)
+            val selected = selectAvailableModel(root.toString(), "") ?: throw AmplifyRequestException(
+                "Amplify did not return any models available to this token. Ask the token administrator to grant chat model access."
+            )
+            recoveryModelId = RECOVERY_MODEL_ID.takeIf { it != selected && it in availableIds }
+                ?: availableIds.firstOrNull { it != selected }
+            modelDiscoveryFailure = null
+            resolvedModelId = selected
+            return selected
+        }
 
-        val selected = runCatching {
-            selectAvailableModel(res.body, preferredModelId)
-        }.getOrElse { cause ->
-            throw AmplifyRequestException("Amplify returned an invalid available-models response.", cause)
-        } ?: throw AmplifyRequestException(
-            "Amplify did not return any models available to this token. Ask the token administrator to grant chat model access."
-        )
-
-        val availableIds = availableModelIds(parseResponse(res.body).optJSONObject("data"))
-        // Prefer the model verified in successful recommendation runs, but never
-        // send a model ID that this account's /available_models did not advertise.
-        recoveryModelId = RECOVERY_MODEL_ID.takeIf { it != selected && it in availableIds }
-            ?: availableIds.firstOrNull { it != selected }
-        resolvedModelId = selected
-        return selected
+        // This ID has worked in study runs. A failed model-list request does not
+        // prove the chat route is down, so let /chat make the final access check.
+        resolvedModelId = RECOVERY_MODEL_ID
+        return RECOVERY_MODEL_ID
     }
 
     // Matches Amplify's API: top-level { "data": { ... } } and model/prompt inside options.
@@ -163,14 +188,18 @@ class AmplifyChatClient(
 
     private data class HttpResult(
         val status: Int,
-        val body: String
+        val body: String,
+        val contentType: String
     )
 
     private fun execute(req: HttpRequest): HttpResult {
         // Decode as UTF-8 explicitly to avoid platform charset issues
         val resp = client.send(req, HttpResponse.BodyHandlers.ofByteArray())
         val bodyUtf8 = String(resp.body(), StandardCharsets.UTF_8)
-        return HttpResult(resp.statusCode(), bodyUtf8)
+        val contentType = resp.headers().firstValue("Content-Type").orElse("")
+            .substringBefore(';').trim().takeIf { it.matches(Regex("[A-Za-z0-9.+_-]+/[A-Za-z0-9.+_-]+")) }
+            ?: "unknown"
+        return HttpResult(resp.statusCode(), bodyUtf8, contentType)
     }
 
     private fun checkStatus(status: Int) {
@@ -184,9 +213,18 @@ class AmplifyChatClient(
         throw AmplifyRequestException(message)
     }
 
-    private fun parseResponse(body: String): JSONObject = runCatching { JSONObject(body) }.getOrElse {
-        throw AmplifyRequestException("Amplify returned an invalid API response. Please try again.")
-    }
+    private fun parseResponse(response: HttpResult, endpoint: String): JSONObject =
+        runCatching { JSONObject(response.body) }.getOrElse {
+            val kind = when {
+                response.body.isBlank() -> "empty"
+                response.body.trimStart().startsWith("<") -> "HTML"
+                else -> "non-JSON"
+            }
+            throw InvalidApiResponseException(
+                "Amplify $endpoint returned HTTP ${response.status} with $kind content " +
+                    "(Content-Type: ${response.contentType})."
+            )
+        }
 
     private fun checkSuccess(root: JSONObject) {
         if (root.has("success") && !root.optBoolean("success", true) ||
@@ -197,6 +235,7 @@ class AmplifyChatClient(
     }
 
     private class AmplifyRequestException(message: String, cause: Throwable? = null) : IOException(message, cause)
+    private class InvalidApiResponseException(message: String) : IOException(message)
 
     companion object {
         private const val RECOVERY_MODEL_ID = "us.openai.gpt-5.6-luna"

@@ -14,6 +14,64 @@ class AmplifyChatClientTest {
     private val availableModels = """{"data":{"models":[{"id":"test-model"}],"default":{"id":"test-model"}}}"""
 
     @Test
+    fun `malformed model discovery retries then uses direct chat`() {
+        val sentModels = mutableListOf<String>()
+        withServer(200, "<html>Unexpected gateway page</html>", 200,
+            """{"success":true,"data":"A useful recommendation"}""", sentModels = sentModels
+        ) { client, requests ->
+            assertEquals("A useful recommendation", client.chatOnce("source context"))
+            assertEquals(listOf("/available_models", "/available_models", "/chat"), requests)
+            assertEquals(listOf("us.openai.gpt-5.6-luna"), sentModels)
+        }
+    }
+
+    @Test
+    fun `valid model discovery retry keeps normal model selection`() {
+        val sentModels = mutableListOf<String>()
+        withServer(200, "not JSON", 200, """{"success":true,"data":"A useful recommendation"}""",
+            sentModels = sentModels, modelBodiesInOrder = listOf("not JSON", availableModels)
+        ) { client, requests ->
+            assertEquals("A useful recommendation", client.chatOnce("source context"))
+            assertEquals(listOf("/available_models", "/available_models", "/chat"), requests)
+            assertEquals(listOf("test-model"), sentModels)
+        }
+    }
+
+    @Test
+    fun `explicit model skips the failing model discovery route`() {
+        withServer(200, "not JSON", 200, """{"success":true,"data":"A useful recommendation"}""",
+            preferredModelId = "known-model"
+        ) { client, requests ->
+            assertEquals("A useful recommendation", client.chatOnce("source context"))
+            assertEquals(listOf("/chat"), requests)
+            assertEquals("known-model", client.resolvedModelId)
+        }
+    }
+
+    @Test
+    fun `model discovery API failure does not try direct chat`() {
+        withServer(200, """{"success":false,"error":"private-server-content"}""", 200, "unused") { client, requests ->
+            val failure = runCatching { client.chatOnce("source context") }.exceptionOrNull()
+            assertTrue(failure is IOException)
+            assertEquals(listOf("/available_models"), requests)
+            assertFalse(failure!!.message!!.contains("private-server-content"))
+        }
+    }
+
+    @Test
+    fun `failed direct chat identifies both endpoints without leaking response bodies`() {
+        withServer(200, "<html>private-model-response</html>", 200, "<html>private-chat-response</html>") { client, requests ->
+            val failure = runCatching { client.chatOnce("source context") }.exceptionOrNull()
+            assertTrue(failure is IOException)
+            assertEquals(listOf("/available_models", "/available_models", "/chat"), requests)
+            assertTrue(failure!!.message!!.contains("/available_models"))
+            assertTrue(failure.message!!.contains("/chat"))
+            assertFalse(failure.message!!.contains("private-model-response"))
+            assertFalse(failure.message!!.contains("private-chat-response"))
+        }
+    }
+
+    @Test
     fun `empty default response retries an available alternative and keeps it for review`() {
         val models = """{"data":{"models":[{"id":"default-model"},{"id":"us.openai.gpt-5.6-luna"}],"default":{"id":"default-model"}}}"""
         val review = """{"recommendations":[{"name":"Add positive numbers","covers":"Addition","action":"Use 2 and 3","expected":"The result is 5","targetLines":[],"reachableLines":[]}]}"""
@@ -163,9 +221,12 @@ class AmplifyChatClientTest {
         chatBodiesByModel: Map<String, String> = emptyMap(),
         sentModels: MutableList<String> = mutableListOf(),
         chatBodiesInOrder: List<String> = emptyList(),
+        modelBodiesInOrder: List<String> = emptyList(),
+        preferredModelId: String = "",
         test: (AmplifyChatClient, List<String>) -> Unit
     ) {
         val requests = java.util.Collections.synchronizedList(mutableListOf<String>())
+        var modelRequestCount = 0
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { exchange ->
             val path = exchange.requestURI.path
@@ -176,7 +237,7 @@ class AmplifyChatClientTest {
                     .also { sentModels.add(it) }
             } else null
             val status = if (path == "/available_models") modelStatus else chatStatus
-            val body = if (path == "/available_models") modelBody else
+            val body = if (path == "/available_models") modelBodiesInOrder.getOrNull(modelRequestCount++) ?: modelBody else
                 chatBodiesInOrder.getOrNull(sentModels.size - 1) ?: chatBodiesByModel[model] ?: chatBody
             val bytes = body.toByteArray(Charsets.UTF_8)
             exchange.responseHeaders.set("Content-Type", "application/json")
@@ -186,7 +247,7 @@ class AmplifyChatClientTest {
         server.start()
         val httpClient = HttpClient.newHttpClient()
         try {
-            val client = AmplifyChatClient("http://127.0.0.1:${server.address.port}", "test-token", "", httpClient)
+            val client = AmplifyChatClient("http://127.0.0.1:${server.address.port}", "test-token", preferredModelId, httpClient)
             test(client, requests)
         } finally {
             httpClient.close()

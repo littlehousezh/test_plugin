@@ -23,7 +23,7 @@ Provides an IntelliJ Platform plugin that identifies coverage hotspots from the 
 
 If TestCompass does not appear in the JetBrains Marketplace:
 
-1. Get the `TestCompass-0.0.11.zip` study build from your instructor. Do not extract the ZIP file.
+1. Get the `TestCompass-0.0.9.zip` study build from your instructor. Do not extract the ZIP file.
 2. Open IntelliJ IDEA.
 3. Go to `Settings > Plugins`.
 4. Click the gear icon and select `Install Plugin from Disk...`.
@@ -87,7 +87,9 @@ An earlier response-handling bug could display a blank window when the AI review
 
 If the updated plugin reports an authentication or access error, check the saved token or ask the instructor to check model access. For a request limit, wait and retry. For an invalid review response, try generating again.
 
-Amplify can also accept a request but return empty text. TestCompass now retries once with another model advertised as available to your account, preferring `us.openai.gpt-5.6-luna` when available, then uses the working model for the remaining review steps. This may add one model request. Authentication, access, and quota errors are not retried. If both models return empty text, the error identifies the models instead of suggesting that the token is invalid. You can select a preferred available model with `AMPLIFY_MODEL_ID` in the IDE environment or `plugin.env`.
+Amplify can also accept a request but return empty text. TestCompass retries once with another model advertised as available to your account, preferring `us.openai.gpt-5.6-luna` when available, then uses the working model for the remaining review steps. This may add one model request. Authentication, access, and quota errors are not retried. If both models return empty text, the error identifies the models instead of suggesting that the token is invalid.
+
+If Amplify's `/available_models` route returns malformed content or a server error, TestCompass retries that route once and then tries `/chat` directly with `us.openai.gpt-5.6-luna`, which has worked in study runs. This recovery succeeds only if the token is authorized for that model and the chat route is reachable. To bypass model discovery entirely, set a known authorized model ID with `AMPLIFY_MODEL_ID` in the IDE environment or `plugin.env`. Authentication and quota failures still stop immediately. Errors identify the endpoint and response type without saving the raw API response or token.
 
 If a later review or correction fails, TestCompass shows the suggestions that passed its checks. If none passed, it shows the readable draft instead of dumping structured review data. The dialog focuses on behavior that still needs testing, what to do, the expected result, and behavior already covered. Check any draft advice against your code before using it. If no answer was returned at all, the dialog explains that rather than appearing blank.
 
