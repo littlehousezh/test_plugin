@@ -2,6 +2,7 @@ package com.github.ronah123.vanderbilttestplugin.coverage
 
 import com.github.ronah123.vanderbilttestplugin.actions.MethodHit
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
@@ -172,6 +173,7 @@ object CodeExtraction {
         val trimmed = key.trim()
         val tail = trimmed.substringAfterLast('.')           // drop package/Class prefix if present
         val head = tail.substringBefore('(')                 // drop JVM descriptor/sig
+        if (head.endsWith("<init>")) return "<init>"
         val m = Regex("""([A-Za-z_][$\w]*)\s*$""").find(head)
         val token = m?.groupValues?.get(1) ?: head.trim()
         return when {
@@ -235,7 +237,9 @@ object CodeExtraction {
             }
         }
 
-        // 2) Otherwise, rank all .kt/.java that look like tests
+        // 2) Only inspect test-source files or files whose names identify them as tests.
+        // Reading every production file here made generation slow on larger projects and
+        // could select a production class merely because it mentioned @Test in a comment.
         val allByExt = FilenameIndex.getAllFilesByExt(project, "kt", scope) + FilenameIndex.getAllFilesByExt(
             project,
             "java",
@@ -243,28 +247,40 @@ object CodeExtraction {
         )
 
         val candidates = allByExt.asSequence().mapNotNull { vf ->
-                val pf = PsiManager.getInstance(project).findFile(vf) ?: return@mapNotNull null
-                if (vf.let(index::isInContent) != true) return@mapNotNull null
-                pf
+                ProgressManager.checkCanceled()
+                if (!index.isInContent(vf)) return@mapNotNull null
+                val name = vf.name.lowercase()
+                val testNamed = name.endsWith("test.kt") || name.endsWith("test.java") ||
+                    name.endsWith("tests.kt") || name.endsWith("tests.java") ||
+                    name.endsWith("spec.kt") || name.endsWith("spec.java") ||
+                    name.endsWith("it.kt") || name.endsWith("it.java")
+                if (!testNamed && !index.isInTestSourceContent(vf)) return@mapNotNull null
+                PsiManager.getInstance(project).findFile(vf)
             }.map { pf ->
-                val text = pf.text
+                ProgressManager.checkCanceled()
+                val text = pf.text.take(CoverageAIConfig.MAX_TEST_FILE_CHARS)
                 val nameLc = pf.name.lowercase()
                 val hitTestWord =
-                    nameLc.contains("test") || nameLc.endsWith("spec.kt") || nameLc.endsWith("spec.java") || nameLc.endsWith(
+                    nameLc.endsWith("test.kt") || nameLc.endsWith("test.java") ||
+                    nameLc.endsWith("tests.kt") || nameLc.endsWith("tests.java") ||
+                    nameLc.endsWith("spec.kt") || nameLc.endsWith("spec.java") || nameLc.endsWith(
                         "it.kt"
                     ) || nameLc.endsWith("it.java")
                 val mentionsClass = classNames.any { c -> nameLc.contains(c.lowercase()) || text.contains(c) }
                 val mentionsMethod = methodNames.any { m -> nameLc.contains(m.lowercase()) || text.contains(m) }
                 val importsJunit = text.contains("org.junit") || text.contains("@Test")
                 val score =
-                    (if (hitTestWord) 60 else 0) +
+                    (if (hitTestWord || pf.virtualFile?.let(index::isInTestSourceContent) == true) 60 else 0) +
                         (if (mentionsClass) 40 else 0) +
                         (if (mentionsMethod) 15 else 0) +
                         (if (importsJunit) 20 else 0) +
                         min(text.length, 20_000) / 1000
                 Triple(pf, text, score)
             }
-            .filter { (_, _, score) -> score >= 80 }
+            .filter { (pf, text, score) ->
+                score >= 80 && (classNames.any { c -> pf.name.contains(c, ignoreCase = true) || text.contains(c) } ||
+                    methodNames.any { m -> pf.name.contains(m, ignoreCase = true) || text.contains(m) })
+            }
             .sortedWith(compareByDescending<Triple<PsiFile, String, Int>> { it.third }.thenBy { it.first.name })
             .map { it.first }
             .toList()
@@ -417,6 +433,7 @@ Required review:
 - For Mars Rover, fill commandSequence, movement, gridWidth, and gridHeight; use an empty bowlingFrames array.
 - For bowling, expand bowlingFrames to one object per actual frame, provide bowlingBonus when used, and provide expectedNumericTotal; leave rover-only fields empty or zero.
 - Student-facing name, covers, action, expected, and alreadyCovered values must remain plain-language guidance without Java or Kotlin assertion statements, method calls, test bodies, or code snippets.
+- In alreadyCovered, mention only behavior exercised by existing tests. Do not include setup, refactoring, or advice about the new suggestions.
 
 ===== DRAFT RECOMMENDATIONS TO REVIEW =====
 $draft
@@ -456,35 +473,33 @@ $invalidResponse
         return if (lang.isNotEmpty()) "```$lang\n$code\n```" else "```\n$code\n```"
     }
 
-    /**
-     * If the prompt exceeds MAX_PROMPT_CHARS, we keep *all* method code intact and
-     * shrink only the test file block (from the bottom). This matches your “include once”
-     * requirement while still guaranteeing the call will fit.
-     */
+    /** Keep hotspot methods when large test or production files exceed the request budget. */
     private fun enforceGlobalBudget(full: String): String {
         if (full.length <= CoverageAIConfig.MAX_PROMPT_CHARS) return full
+        val withoutExcessTests = trimSection(
+            full, "===== Current relevant test files =====", "===== Complete production source context =====",
+            "\n... [truncated relevant test files]\n"
+        )
+        if (withoutExcessTests.length <= CoverageAIConfig.MAX_PROMPT_CHARS) return withoutExcessTests
+        return trimSection(
+            withoutExcessTests, "===== Complete production source context =====",
+            "===== Coverage hotspots selected for recommendation =====",
+            "\n... [truncated production source; hotspot methods follow]\n"
+        ).take(CoverageAIConfig.MAX_PROMPT_CHARS)
+    }
 
-        val marker = "===== Current relevant test files ====="
-        val nextMarker = "===== Coverage hotspots selected for recommendation ====="
-        val start = full.indexOf(marker)
-        val end = full.indexOf(nextMarker)
-        if (start < 0) return full.take(CoverageAIConfig.MAX_PROMPT_CHARS)
-        if (end <= start) return full.take(CoverageAIConfig.MAX_PROMPT_CHARS)
-
-        val before = full.substring(0, start + marker.length)
-        val testBody = full.substring(start + marker.length, end)
+    private fun trimSection(full: String, startMarker: String, endMarker: String, notice: String): String {
+        if (full.length <= CoverageAIConfig.MAX_PROMPT_CHARS) return full
+        val start = full.indexOf(startMarker)
+        if (start < 0) return full
+        val bodyStart = start + startMarker.length
+        val end = full.indexOf(endMarker, bodyStart)
+        if (end < 0) return full
+        val before = full.substring(0, bodyStart)
         val after = full.substring(end)
-
-        // Binary search the largest keep of testBody that fits.
-        var lo = 0
-        var hi = testBody.length
-        fun build(mid: Int) = before + testBody.take(mid) + "\n... [truncated relevant test files]\n" + after
-        while (lo < hi) {
-            val mid = (lo + hi + 1) / 2
-            val cand = build(mid)
-            if (cand.length <= CoverageAIConfig.MAX_PROMPT_CHARS) lo = mid else hi = mid - 1
-        }
-        return build(lo)
+        val available = (CoverageAIConfig.MAX_PROMPT_CHARS - before.length - after.length - notice.length).coerceAtLeast(0)
+        val body = full.substring(bodyStart, end)
+        return if (body.length <= available) full else before + body.take(available) + notice + after
     }
 
     private fun missedLineDetails(bundle: MethodCoverageBundle): String {

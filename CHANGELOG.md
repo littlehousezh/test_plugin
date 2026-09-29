@@ -4,6 +4,22 @@
 
 ## [Unreleased]
 
+## [0.0.11]
+
+### Changed
+- Restore the original coverage-table layout and recommendation dialog; remove the saved-response controls and lower response pane.
+- Show only checked, student-facing suggestions from partial reviews, with clear behavior, action, and expected-result labels.
+- Increase recommendation text size and emphasize headings and test names for easier reading.
+
+## [0.0.10]
+
+### Fixed
+- Limit test-file scanning to relevant test candidates and keep oversized prompts within the request budget while retaining hotspot methods.
+- Resolve constructor coverage signatures correctly.
+- Keep recommendations visible in the tool window and save student-facing responses for later review.
+- Explain incomplete additional accuracy checks without labeling the available guidance “unverified”.
+- Improve narrow tool-window layout, method tooltips, cancellation feedback, and response controls.
+
 ## [0.0.8]
 
 ### Fixed

@@ -23,7 +23,7 @@ Provides an IntelliJ Platform plugin that identifies coverage hotspots from the 
 
 If TestCompass does not appear in the JetBrains Marketplace:
 
-1. [Download TestCompass 0.0.8](https://github.com/littlehousezh/test_plugin/raw/main/dist/TestCompass-0.0.8.zip). Do not extract the ZIP file.
+1. Get the `TestCompass-0.0.11.zip` study build from your instructor. Do not extract the ZIP file.
 2. Open IntelliJ IDEA.
 3. Go to `Settings > Plugins`.
 4. Click the gear icon and select `Install Plugin from Disk...`.
@@ -54,7 +54,7 @@ Paste the raw token. A leading `Bearer` prefix is not required. You can also lea
 6. Click `Generate recommendations`.
    - If no Amplify token is saved, enter the instructor-provided token in the setup dialog and click `OK`.
    - Generating and checking the recommendations may take a little while. You can monitor the current progress at the bottom of the IntelliJ IDEA window.
-7. Review the conceptual test recommendations.
+7. Review the conceptual test recommendations in the dialog. Use **Copy recommendations** to keep a selection or the full response.
 8. Add or improve the JUnit tests in your project.
 9. Run the tests with coverage again. TestCompass automatically analyzes the new coverage result and refreshes its tool window.
 
@@ -79,7 +79,7 @@ Confirm that the active coverage run includes production classes from the curren
 
 Open IntelliJ IDEA `Settings`/`Preferences`, search for `TestCompass`, and replace the saved Amplify token with a current token from the instructor. Paste only the raw token.
 
-### Recommendations are blank or cannot be verified
+### Recommendations are blank or the additional accuracy check cannot finish
 
 Click **Generate recommendations** once and wait. The button shows **Generating…** and stays disabled while generation and accuracy review are running. It becomes available again when the task finishes, fails, or ends after cancellation. Repeated requests may use up your account allowance, especially when an account or token is shared. The accuracy review remains enabled to help catch incorrect advice.
 
@@ -89,7 +89,7 @@ If the updated plugin reports an authentication or access error, check the saved
 
 Amplify can also accept a request but return empty text. TestCompass now retries once with another model advertised as available to your account, preferring `us.openai.gpt-5.6-luna` when available, then uses the working model for the remaining review steps. This may add one model request. Authentication, access, and quota errors are not retried. If both models return empty text, the error identifies the models instead of suggesting that the token is invalid. You can select a preferred available model with `AMPLIFY_MODEL_ID` in the IDE environment or `plugin.env`.
 
-If a later review or correction fails, TestCompass keeps the last readable model answer and labels it **unverified**. Check its expected results against your code before using it. Structured answers are displayed with readable labels. If no answer was returned at all, the window explains that rather than showing a blank result. A model or network failure can still prevent recommendations, but an empty response is never presented as an empty window.
+If a later review or correction fails, TestCompass shows the suggestions that passed its checks. If none passed, it shows the readable draft instead of dumping structured review data. The dialog focuses on behavior that still needs testing, what to do, the expected result, and behavior already covered. Check any draft advice against your code before using it. If no answer was returned at all, the dialog explains that rather than appearing blank.
 
 
 

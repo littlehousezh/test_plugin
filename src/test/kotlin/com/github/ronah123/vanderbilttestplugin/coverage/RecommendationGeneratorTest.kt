@@ -7,7 +7,7 @@ import org.junit.Test
 class RecommendationGeneratorTest {
 
     @Test
-    fun `malformed review and correction never produce a blank recommendation`() {
+    fun `malformed review and correction show only the readable draft`() {
         var calls = 0
         val client = object : ChatClient {
             override fun chatOnce(prompt: String): String {
@@ -20,12 +20,11 @@ class RecommendationGeneratorTest {
 
         assertEquals(3, calls)
         assertTrue(result.recommendations.isNotBlank())
-        assertTrue(result.recommendations.contains("unverified"))
-        assertTrue(result.recommendations.contains("The service returned an unexpected response."))
+        assertEquals("The service returned an unexpected response.", result.recommendations)
     }
 
     @Test
-    fun `review failure preserves the draft as unverified model output`() {
+    fun `review failure preserves only the draft`() {
         var calls = 0
         val client = object : ChatClient {
             override fun chatOnce(prompt: String): String {
@@ -35,24 +34,22 @@ class RecommendationGeneratorTest {
         }
         val result = RecommendationGenerator(client).generate("synthetic context")
         assertEquals(2, calls)
-        assertTrue(result.recommendations.contains("Try inputs 2 and 3"))
-        assertTrue(result.recommendations.contains("unverified"))
+        assertEquals("Try inputs 2 and 3. Expected: 5.", result.recommendations)
         assertTrue(!result.recommendations.contains("private-server-details"))
     }
 
     @Test
-    fun `empty correction preserves the last nonempty model response`() {
+    fun `empty correction falls back to the concise draft when no item passed`() {
         val responses = ArrayDeque(listOf("Original draft", "Try a boundary input.", ""))
         val client = object : ChatClient {
             override fun chatOnce(prompt: String) = responses.removeFirst()
         }
         val result = RecommendationGenerator(client).generate("synthetic context")
-        assertTrue(result.recommendations.contains("Try a boundary input."))
-        assertTrue(result.recommendations.contains("unverified"))
+        assertEquals("Original draft", result.recommendations)
     }
 
     @Test
-    fun `correction request failure preserves an invalid review as unverified`() {
+    fun `correction request failure does not expose unchecked structured fields`() {
         var calls = 0
         val client = object : ChatClient {
             override fun chatOnce(prompt: String): String = when (++calls) {
@@ -63,8 +60,7 @@ class RecommendationGeneratorTest {
         }
         val result = RecommendationGenerator(client).generate("synthetic context")
         assertEquals(3, calls)
-        assertTrue(result.recommendations.contains("Action: Try zero"))
-        assertTrue(result.recommendations.contains("unverified"))
+        assertEquals("Original draft", result.recommendations)
         assertTrue(!result.recommendations.contains("private-server-details"))
     }
 
@@ -76,8 +72,7 @@ class RecommendationGeneratorTest {
         }
         val result = RecommendationGenerator(client).generate("synthetic context")
         assertEquals(2, calls)
-        assertTrue(result.recommendations.contains("Try zero as the input."))
-        assertTrue(result.recommendations.contains("unverified"))
+        assertEquals("Try zero as the input.", result.recommendations)
     }
 
     @Test
@@ -132,7 +127,7 @@ class RecommendationGeneratorTest {
 
         assertEquals(2, prompts.size)
         assertEquals("Expected: The total score is 52.", result.draft)
-        assertTrue(result.recommendations.contains("Expected: The result is 62."))
+        assertTrue(result.recommendations.contains("Check: The result is 62."))
         assertTrue(reviewStarted)
         assertTrue(prompts[1].contains(result.draft))
         assertTrue(prompts[1].contains("complete source context"))
@@ -162,5 +157,35 @@ class RecommendationGeneratorTest {
         assertTrue(correctionStarted)
         assertTrue(result.recommendations.contains("Move forward west"))
         assertTrue(result.correctionPrompt!!.contains("says backward"))
+    }
+
+    @Test
+    fun `partial rover review shows only checked student guidance`() {
+        val partial = """
+            {"recommendations":[
+              {"name":"completes every right and left turn","covers":"Remaining turn directions.",
+               "action":"On a 5 by 5 grid execute rrrrllll.","expected":"The rover returns (0,0,N).",
+               "targetLines":[40],"reachableLines":[40],"commandSequence":"rrrrllll",
+               "movement":"rotations only","gridWidth":5,"gridHeight":5},
+              {"name":"parses an obstacle","covers":"Obstacle parsing.","action":"Try an obstacle.",
+               "expected":"The rover returns (0,0,N).","targetLines":[86],"reachableLines":[86]}
+            ],"alreadyCovered":"Existing tests cover forward movement. The suggested tests share setup that can be extracted into @BeforeEach."}
+        """.trimIndent()
+        val responses = ArrayDeque(listOf("Recommended tests\n1. Draft suggestion", partial, partial))
+        val client = object : ChatClient {
+            override fun chatOnce(prompt: String) = responses.removeFirst()
+        }
+
+        val shown = RecommendationGenerator(client).generate("class MarsRover {}").recommendations
+
+        assertTrue(shown.startsWith("Still needs testing"))
+        assertTrue(shown.contains("completes every right and left turn"))
+        assertTrue(shown.contains("Do: On a 5 by 5 grid execute rrrrllll."))
+        assertTrue(shown.contains("Already covered\n\nExisting tests cover forward movement."))
+        assertTrue(!shown.contains("parses an obstacle"))
+        assertTrue(!shown.contains("Target lines"))
+        assertTrue(!shown.contains("Model guidance"))
+        assertTrue(!shown.contains("Some suggestions passed"))
+        assertTrue(!shown.contains("@BeforeEach"))
     }
 }

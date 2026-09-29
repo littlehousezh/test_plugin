@@ -6,6 +6,7 @@ import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
@@ -44,11 +45,21 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
         addActionListener { onGenerateRecommendationsClicked() }
     }
 
-    private val table = JBTable(model).apply {
+    private val table = object : JBTable(model) {
+        override fun getToolTipText(event: MouseEvent): String? {
+            val row = rowAtPoint(event.point)
+            return if (row >= 0) model.getValueAt(convertRowIndexToModel(row), 3).toString() else null
+        }
+    }.apply {
         setShowGrid(false)
         autoCreateRowSorter = true
+        autoResizeMode = JTable.AUTO_RESIZE_LAST_COLUMN
         emptyText.text = "No data yet - run TestCompass coverage analysis."
         TableSpeedSearch(this as JTable)
+        columnModel.getColumn(0).preferredWidth = 32
+        columnModel.getColumn(1).preferredWidth = 90
+        columnModel.getColumn(2).preferredWidth = 54
+        columnModel.getColumn(3).preferredWidth = 500
         addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
                 if (e.clickCount == 2 && selectedRow >= 0) {
@@ -64,7 +75,6 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
         layout = BorderLayout()
         border = JBUI.Borders.empty(6, 8)
         add(JBLabel("TestCompass coverage hotspots"), BorderLayout.WEST)
-
         add(generateButton, BorderLayout.EAST)
         add(JBLabel("<html>Please wait for the current request to finish. " +
             "Repeated requests may use up your account allowance.</html>").apply {
@@ -73,9 +83,8 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
     }
 
     init {
-        val scroll = ScrollPaneFactory.createScrollPane(table)
         add(header, BorderLayout.NORTH)
-        add(scroll, BorderLayout.CENTER)
+        add(ScrollPaneFactory.createScrollPane(table), BorderLayout.CENTER)
     }
 
     fun setData(rows: List<MethodHit>) {
@@ -83,8 +92,8 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
         model.rowCount = 0
         rows.forEachIndexed { idx, m ->
             val pct = if (m.totalLines == 0) 100.0 else (m.coveredLines * 100.0 / m.totalLines)
-            val methodId = "${m.classFqn}#${m.method}".let { s -> if (s.length <= 180) s else s.take(177) + "..." }
-            model.addRow(arrayOf(idx + 1, "${m.missedLines}/${m.totalLines}", String.format("%.1f", pct), methodId))
+            val methodId = "${m.classFqn}#${m.method}"
+            model.addRow(arrayOf<Any>(idx + 1, "${m.missedLines}/${m.totalLines}", String.format("%.1f", pct), methodId))
         }
         if (rows.isNotEmpty()) table.setRowSelectionInterval(0, 0)
     }
@@ -100,19 +109,6 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
 
     private fun onGenerateRecommendationsClicked() {
         if (generationInProgress) return
-
-        val settings = getApplication().getService(CoverageSettings::class.java)
-        if (!settings.isConfigured()) {
-            if (!TestCompassSetupDialog(project, settings).showAndGet() || !settings.isConfigured()) {
-                Messages.showInfoMessage(
-                    project,
-                    "Enter your Amplify token to generate recommendations.",
-                    "TestCompass Setup"
-                )
-                return
-            }
-        }
-
         val total = model.rowCount
         if (total == 0) {
             Messages.showInfoMessage(project, "Run TestCompass coverage analysis first.", "TestCompass")
@@ -133,61 +129,63 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
             return
         }
 
+        val settings = getApplication().getService(CoverageSettings::class.java)
+        if (!settings.isConfigured()) {
+            if (!TestCompassSetupDialog(project, settings).showAndGet() || !settings.isConfigured()) {
+                Messages.showInfoMessage(project, "Enter your Amplify token to generate recommendations.", "TestCompass Setup")
+                return
+            }
+        }
+
         val task = object : Task.Backgroundable(project, "Generating test recommendations", true) {
             override fun onFinished() {
                 setGenerationInProgress(false)
             }
 
             override fun run(indicator: ProgressIndicator) {
-                indicator.isIndeterminate = true
-                indicator.text = "Collecting source & tests…"
+                try {
+                    indicator.isIndeterminate = true
+                    indicator.text = "Collecting source & tests…"
 
-                // Compute BOTH the method bundles and the single test file inside a ReadAction.
-                val (bundles, testFiles) = ReadAction.compute<Pair<List<MethodCoverageBundle>, List<TestFileBundle>>, RuntimeException> {
-                    val bs = CodeExtraction.resolveTopBundles(project, selectedHits)
-                    val tf = CodeExtraction.resolveRelevantTestFiles(project, bs)
-                    bs to tf
-                }
+                    val (bundles, testFiles) = ReadAction.compute<Pair<List<MethodCoverageBundle>, List<TestFileBundle>>, RuntimeException> {
+                        val bs = CodeExtraction.resolveTopBundles(project, selectedHits)
+                        val tf = CodeExtraction.resolveRelevantTestFiles(project, bs)
+                        bs to tf
+                    }
 
-                if (bundles.isEmpty()) {
-                    info("Could not resolve any methods/test files to analyze.")
-                    return
-                }
+                    if (bundles.isEmpty()) {
+                        info("Could not resolve any production methods to analyze. Refresh coverage and try again.")
+                        return
+                    }
 
-                indicator.text = "Calling Chat API…"
-                val prompt = CodeExtraction.buildPrompt(bundles, testFiles)
-                val amplifyBase = CoverageAIConfig.getAmplifyBase()
-                val modelId = CoverageAIConfig.getModelId()
+                    indicator.text = "Calling Chat API…"
+                    val prompt = CodeExtraction.buildPrompt(bundles, testFiles)
+                    val amplifyBase = CoverageAIConfig.getAmplifyBase()
+                    val modelId = CoverageAIConfig.getModelId()
 
-                val client = AmplifyChatClient(
-                    amplifyBase,
-                    CoverageAIConfig.getAmplifyBearer(),
-                    modelId
-                )
+                    val client = AmplifyChatClient(amplifyBase, CoverageAIConfig.getAmplifyBearer(), modelId)
 
-                val promptToSend = if (CoverageAIConfig.DEBUG_SIMPLE_PROMPT)
-                    CoverageAIConfig.DEBUG_SIMPLE_PROMPT_TEXT
-                else
-                    prompt
+                    val promptToSend = if (CoverageAIConfig.DEBUG_SIMPLE_PROMPT)
+                        CoverageAIConfig.DEBUG_SIMPLE_PROMPT_TEXT else prompt
 
-                var error: Throwable? = null
-                var verificationPrompt = promptToSend
-                val response = try {
-                    val result = RecommendationGenerator(client).generate(
-                        contextPrompt = promptToSend,
-                        beforeVerification = { indicator.text = "Reviewing recommendation accuracy…" },
-                        beforeCorrection = { indicator.text = "Correcting inconsistent recommendations…" }
-                    )
-                    verificationPrompt = result.finalPrompt
-                    result.recommendations
-                } catch (t: Throwable) {
-                    error = t
-                    log.warn("Chat API failed", t)
-                    "Failed to get recommendations: ${t.message}"
-                }
+                    var error: Throwable? = null
+                    var verificationPrompt = promptToSend
+                    val response = try {
+                        val result = RecommendationGenerator(client).generate(
+                            contextPrompt = promptToSend,
+                            beforeVerification = { indicator.text = "Reviewing recommendation accuracy…" },
+                            beforeCorrection = { indicator.text = "Correcting inconsistent recommendations…" }
+                        )
+                        verificationPrompt = result.finalPrompt
+                        result.recommendations
+                    } catch (cancelled: ProcessCanceledException) {
+                        throw cancelled
+                    } catch (t: Throwable) {
+                        error = t
+                        log.warn("Chat API failed", t)
+                        "Could not get recommendations: ${t.message ?: "Please try again."}"
+                    }
 
-                ApplicationManager.getApplication().invokeLater {
-                    // A disk/logging failure must not prevent users from seeing the answer.
                     runCatching {
                         project.getService(AIInteractionLoggerService::class.java)?.logAiInteraction(
                             verificationPrompt,
@@ -197,7 +195,18 @@ class CoverageHotspotsPanel(private val project: Project) : JPanel(BorderLayout(
                             error
                         )
                     }.onFailure { log.warn("Could not save the recommendation interaction log", it) }
-                    RecommendationsDialog(project, response).show()
+                    ApplicationManager.getApplication().invokeLater {
+                        if (!project.isDisposed) RecommendationsDialog(project, response).show()
+                    }
+                } catch (cancelled: ProcessCanceledException) {
+                    throw cancelled
+                } catch (t: Throwable) {
+                    log.warn("Could not generate recommendations", t)
+                    ApplicationManager.getApplication().invokeLater {
+                        if (!project.isDisposed) RecommendationsDialog(
+                            project, "Could not process project files: ${t.message ?: "Please try again."}"
+                        ).show()
+                    }
                 }
             }
         }

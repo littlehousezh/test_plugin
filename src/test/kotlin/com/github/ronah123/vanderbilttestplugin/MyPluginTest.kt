@@ -132,6 +132,31 @@ class MyPluginTest : BasePlatformTestCase() {
         assertContainsElements(sourceNames, "BowlingGame.java", "Frame.java")
     }
 
+    fun testRelevantTestFilesExcludeUnrelatedAndProductionFiles() {
+        myFixture.addFileToProject("src/MarsRover.java", "public class MarsRover { public void move() {} }")
+        myFixture.addFileToProject("test/MarsRoverTest.java", "class MarsRoverTest { void checkMove() { MarsRover rover; } }")
+        myFixture.addFileToProject("test/UnrelatedTest.java", "class UnrelatedTest { @Test void check() {} }")
+        myFixture.addFileToProject("src/Helper.java", "// @Test MarsRover move\nclass Helper {}")
+        val hit = MethodHit("MarsRover", "move()V", 1, 0, 1, 0.0)
+
+        val bundles = CodeExtraction.resolveTopBundles(project, listOf(hit))
+        val found = CodeExtraction.resolveRelevantTestFiles(project, bundles)
+
+        assertSize(1, found)
+        assertEquals("MarsRoverTest.java", found.single().testFilePath?.substringAfterLast('/'))
+    }
+
+    fun testConstructorCoverageSignatureResolvesToConstructorSource() {
+        myFixture.addFileToProject("src/MarsRover.java", "public class MarsRover { public MarsRover(int width) {} }")
+        val hit = MethodHit("MarsRover", "<init>(I)V", 1, 0, 1, 0.0)
+
+        val bundles = CodeExtraction.resolveTopBundles(project, listOf(hit))
+
+        assertSize(1, bundles)
+        assertEquals("<init>", bundles.single().method.methodName)
+        assertTrue(bundles.single().method.methodText.contains("MarsRover(int width)"))
+    }
+
     private fun coverageBundle(timestamp: AtomicLong): CoverageSuitesBundle {
         val suite = Proxy.newProxyInstance(
             CoverageSuite::class.java.classLoader,

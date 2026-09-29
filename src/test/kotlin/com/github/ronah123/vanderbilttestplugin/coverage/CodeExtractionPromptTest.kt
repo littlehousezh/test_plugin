@@ -78,4 +78,22 @@ class CodeExtractionPromptTest {
         assertTrue(verificationPrompt.contains("Expected: The total score is 52."))
         assertTrue(verificationPrompt.contains("production source and current tests"))
     }
+
+    @Test
+    fun `large files stay within request budget while retaining hotspot method`() {
+        val sources = (1..6).map { index ->
+            ProductionSourceBundle("Source$index", "/src/Source$index.java", "x".repeat(20_000))
+        }
+        val method = MethodBundle("Example", "run", "int run() { return 42; }", "/src/Example.java", 1, 1, sources)
+        val hit = MethodHit("Example", "run()I", 1, 0, 1, 0.0)
+
+        val prompt = CodeExtraction.buildPrompt(
+            listOf(MethodCoverageBundle(hit, method)),
+            listOf(TestFileBundle("/test/ExampleTest.java", "t".repeat(20_000)))
+        )
+
+        assertTrue(prompt.length <= CoverageAIConfig.MAX_PROMPT_CHARS)
+        assertTrue(prompt.contains("int run() { return 42; }"))
+        assertTrue(prompt.contains("truncated production source"))
+    }
 }

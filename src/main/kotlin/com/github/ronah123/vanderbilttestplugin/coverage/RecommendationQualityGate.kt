@@ -197,20 +197,27 @@ object RecommendationQualityGate {
 
     private fun render(items: List<JSONObject>, alreadyCovered: String): String {
         if (items.isEmpty()) return "No recommendations passed the accuracy checks."
+        val coveredBehavior = alreadyCovered.trim()
+            .split(Regex("(?<=[.!?])\\s+"))
+            .filterNot { sentence ->
+                listOf("suggested", "recommend", "shared setup", "extract", "@beforeeach")
+                    .any { it in sentence.lowercase() }
+            }
+            .joinToString(" ").trim()
         return buildString {
-            appendLine("Recommended tests")
+            appendLine("Still needs testing")
             items.forEachIndexed { index, item ->
                 appendLine()
                 appendLine("${index + 1}. ${item.getString("name")}")
-                appendLine("   Covers: ${item.getString("covers")}")
-                appendLine("   Action: ${item.getString("action")}")
-                appendLine("   Expected: ${item.getString("expected")}")
+                appendLine("   Behavior: ${item.getString("covers")}")
+                appendLine("   Do: ${item.getString("action")}")
+                appendLine("   Check: ${item.getString("expected")}")
             }
-            if (alreadyCovered.isNotBlank()) {
+            if (coveredBehavior.isNotBlank()) {
                 appendLine()
                 appendLine("Already covered")
                 appendLine()
-                append(alreadyCovered.trim())
+                append(coveredBehavior)
             }
         }.trim()
     }

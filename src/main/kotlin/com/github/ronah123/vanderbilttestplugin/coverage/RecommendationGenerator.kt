@@ -28,12 +28,10 @@ class RecommendationGenerator(private val client: ChatClient) {
         val reviewed = try {
             client.chatOnce(verificationPrompt)
         } catch (_: IOException) {
-            return unverifiedResult(draft, verificationPrompt, null,
-                "The accuracy review could not be completed. The earlier model answer is shown below.", draft)
+            return result(draft, verificationPrompt, null, draftGuidance(draft))
         }
         if (RecommendationTextFormatter.readableContent(reviewed).isBlank()) {
-            return unverifiedResult(draft, verificationPrompt, null,
-                "Amplify returned no readable text during the accuracy review. The earlier model answer is shown below.", draft)
+            return result(draft, verificationPrompt, null, draftGuidance(draft))
         }
         val firstCheck = RecommendationQualityGate.validateAndRender(reviewed, contextPrompt)
         if (firstCheck.isFullyValid) {
@@ -47,37 +45,36 @@ class RecommendationGenerator(private val client: ChatClient) {
         val corrected = try {
             client.chatOnce(correctionPrompt)
         } catch (_: IOException) {
-            return unverifiedResult(draft, verificationPrompt, correctionPrompt,
-                "The model's answer could not be verified, and the correction request failed.", reviewed, draft)
+            return result(draft, verificationPrompt, correctionPrompt, checkedOrDraft(firstCheck, draft))
         }
         if (RecommendationTextFormatter.readableContent(corrected).isBlank()) {
-            return unverifiedResult(draft, verificationPrompt, correctionPrompt,
-                "Amplify returned no readable text during correction. The earlier model answer is shown below.", reviewed, draft)
+            return result(draft, verificationPrompt, correctionPrompt, checkedOrDraft(firstCheck, draft))
         }
         val finalCheck = RecommendationQualityGate.validateAndRender(corrected, contextPrompt)
         if (!finalCheck.isFullyValid) {
-            val reason = if (finalCheck.validCount > 0) {
-                finalCheck.rendered + "\n\nSome model output did not pass the accuracy checks."
-            } else "The model's answer could not be verified. Its available response is shown below."
-            return unverifiedResult(draft, verificationPrompt, correctionPrompt, reason, corrected, reviewed, draft)
+            val bestCheck = if (finalCheck.validCount >= firstCheck.validCount) finalCheck else firstCheck
+            return result(draft, verificationPrompt, correctionPrompt, checkedOrDraft(bestCheck, draft))
         }
         return RecommendationGenerationResult(
             draft, verificationPrompt, correctionPrompt, correctionPrompt, finalCheck.rendered
         )
     }
 
-    private fun unverifiedResult(
+    private fun checkedOrDraft(check: RecommendationQualityResult, draft: String): String =
+        if (check.validCount > 0) check.rendered else draftGuidance(draft)
+
+    private fun draftGuidance(draft: String): String =
+        RecommendationTextFormatter.readableContent(draft).ifBlank { RecommendationTextFormatter.NO_OUTPUT_MESSAGE }
+
+    private fun result(
         draft: String,
         verificationPrompt: String,
         correctionPrompt: String?,
-        reason: String,
-        vararg responses: String
+        recommendations: String
     ): RecommendationGenerationResult {
-        val response = responses.asSequence().map(RecommendationTextFormatter::readableContent)
-            .firstOrNull { it.isNotBlank() } ?: RecommendationTextFormatter.NO_OUTPUT_MESSAGE
         return RecommendationGenerationResult(
             draft, verificationPrompt, correctionPrompt, correctionPrompt ?: verificationPrompt,
-            "$reason\n\nModel response (unverified)\nCheck the expected results against your code before using this advice.\n\n$response"
+            recommendations
         )
     }
 }

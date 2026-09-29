@@ -3,12 +3,14 @@ package com.github.ronah123.vanderbilttestplugin.coverage
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.ui.ScrollPaneFactory
-import com.intellij.ui.components.JBTextArea
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.Dimension
+import java.awt.Font
 import java.awt.Toolkit
 import javax.swing.*
+import javax.swing.text.SimpleAttributeSet
+import javax.swing.text.StyleConstants
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -17,18 +19,48 @@ class RecommendationsDialog(
     response: String
 ) : DialogWrapper(project, true) {
 
-    private val recommendationsArea = JBTextArea().apply {
+    private val recommendationsArea = JTextPane().apply {
         isEditable = false
-        lineWrap = true
-        wrapStyleWord = true
-        text = RecommendationTextFormatter.toDisplayText(response)
-        caretPosition = 0
-        border = JBUI.Borders.empty(8)
+        border = JBUI.Borders.empty(16, 20)
     }
 
     init {
         title = "Test Recommendations"
+        showReadableText(RecommendationTextFormatter.toDisplayText(response))
         init()
+    }
+
+    private fun showReadableText(text: String) {
+        val baseFont = UIManager.getFont("TextPane.font") ?: Font(Font.SANS_SERIF, Font.PLAIN, 14)
+        val base = SimpleAttributeSet().apply {
+            StyleConstants.setFontFamily(this, baseFont.family)
+            StyleConstants.setFontSize(this, baseFont.size + 2)
+        }
+        val heading = SimpleAttributeSet(base).apply {
+            StyleConstants.setBold(this, true)
+            StyleConstants.setFontSize(this, baseFont.size + 5)
+        }
+        val titleStyle = SimpleAttributeSet(base).apply { StyleConstants.setBold(this, true) }
+        val labelStyle = SimpleAttributeSet(base).apply { StyleConstants.setBold(this, true) }
+        val document = recommendationsArea.styledDocument
+        val labeledLine = Regex("^(\\s*(?:Behavior|Do|Check):)(.*)$")
+        val lines = text.lines()
+        lines.forEachIndexed { index, line ->
+            val separator = if (index == lines.lastIndex) "" else "\n"
+            val label = labeledLine.matchEntire(line)
+            when {
+                line == "Still needs testing" || line == "Recommended tests" || line == "Already covered" ->
+                    document.insertString(document.length, line + separator, heading)
+                line.matches(Regex("^\\d+\\.\\s+.*")) ->
+                    document.insertString(document.length, line + separator, titleStyle)
+                label != null -> {
+                    document.insertString(document.length, label.groupValues[1], labelStyle)
+                    document.insertString(document.length, label.groupValues[2] + separator, base)
+                }
+                else -> document.insertString(document.length, line + separator, base)
+            }
+        }
+        recommendationsArea.caretPosition = 0
     }
 
     override fun createCenterPanel(): JComponent {
